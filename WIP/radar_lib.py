@@ -13,7 +13,6 @@ import pickle
 from tqdm import tqdm
 
 
-fbuf = 1032  ## 1032 for rtvlba files.  5032 for disk-copied files
 
 ################################################
 ### Helper functions
@@ -25,7 +24,7 @@ def fhead(fname='',mode='rb',seekto=0):
     fh,ref_mjd = open_file(fname,mode,seekto)
     fh.close()
     
-    
+ 
 ### File I/O
 def open_file(fname='',mode='rb',seekto=0):
     """
@@ -36,7 +35,7 @@ def open_file(fname='',mode='rb',seekto=0):
     seekto = integer : nframes
              string : isot time string : 2024-10-30T15:15:00.000000000
     """
-    global fbuf
+    fbuf = 1032  ## 1032 for rtvlba files.  5032 for disk-copied files
     
     fh = vdif.open(fname,mode)
     fin = fh.info()
@@ -205,6 +204,8 @@ def delay_shift_frame_set(data, tim, tint=None, vb=True,ref_mjd=None):
         ## delayed time is tim + delr
         del_tim = tim + delr
         ## Construct interpolation function for data at original timesteps.
+        if len(tim) != len(data):
+            print("HEY !!", len(tim), len(data))
         dint = interpol.interp1d(tim,data, fill_value=0.0,bounds_error=False)
         ##dint = interpol.interp1d(tim,data,fill_value='extrapolate',bounds_error=False)
         ##dint = interpol.CubicSpline(tim, data, extrapolate=True)
@@ -314,6 +315,39 @@ def disp_binned_ddm(pfile,np0,np1,frac):
     pl.show()
     return bin2plot
 
+
+
+def disp_raster(data=None, pnum=1, title=''):
+    """
+        datastack = [ ndelays, ndopps ]
+    """
+    print('Binning %s for plotting'%(title))
+    shp = data.shape
+    nplot_delay = shp[1] ## This needs to be an integer divisor of 128000
+    nplot_doppler = shp[1]
+    bin2plot = bin_2d(data,nplot_delay,nplot_doppler) 
+    
+    pl.figure(pnum,figsize=(8,6))
+    pl.clf()
+ 
+    im1 = pl.imshow(np.abs(bin2plot), cmap='viridis',
+                    aspect='auto', origin='lower')
+#                        vmin = 100, vmax=3e+3)#,
+                    #extent=[0,new_nfreqs,0,nsamples])
+    #                extent=[0,new_nfreqs,sample_times[0],sample_times[-1]])
+    #im1.axes.set_yticks(range(len(dtimes))[0:-1:int(len(dtimes)/10)])
+    #im1.axes.set_yticklabels(dtimes[0:-1:int(len(dtimes)/10)])
+    pl.xlabel('Frequency (channel id)')
+    pl.ylabel('Time/Delay')
+    pl.colorbar()
+    pl.title(title)
+    pl.ion()
+    pl.show()
+
+    return
+
+
+
 def average_into_steps2(arr, step_size):
     # Check if the array can be evenly divided into steps
     if len(arr) % step_size != 0:
@@ -390,6 +424,33 @@ def take_fft(datastack,fft):
 #            print('FFT at delay %d/%d'%(i,shp[0]))
 
 
+
+
+def take_fft_zpad(datastack,fft,zpad):
+    '''
+    Create FFT maker
+    Do FFT along the long-time axis and return
+    Array size to increase by factor of zpad for zero padding
+    '''
+    shp = datastack.shape
+    nsamples = shp[0]
+    arr = np.zeros(shp[1]*zpad,dtype='complex')
+    fftlen = len(arr)
+    for i in range(0, nsamples):
+#        datastack[i,:] = np.abs(do_fft(fft,datastack[i,:]))
+        arr[int(fftlen/2-shp[1]/2):int(fftlen/2+shp[1]/2)] = datastack[i,:]
+#        farr = np.abs(do_fft(fft,datastack[i,:]))
+        farr = (do_fft(fft,arr))
+        datastack[i,:] = farr[int(fftlen/2-shp[1]/2):int(fftlen/2+shp[1]/2)]
+
+        if np.mod(i, int(nsamples/10)) == 0:
+            print('FFT at delay %d/%d'%(i,nsamples))
+
+    return datastack
+
+
+
+
 def run_matched_filter(datastack,wform):
     """
     datastack = [ ndopps, ndelays ]
@@ -404,31 +465,3 @@ def run_matched_filter(datastack,wform):
 #            print('Run M-filter for PRI %d/%d'%(pri,shp[0]))
 
 
-def disp_raster(data=None, pnum=1, title=''):
-    """
-        datastack = [ ndelays, ndopps ]
-    """
-    print('Binning %s for plotting'%(title))
-    shp = data.shape
-    nplot_delay = shp[1] ## This needs to be an integer divisor of 128000
-    nplot_doppler = shp[1]
-    bin2plot = bin_2d(data,nplot_delay,nplot_doppler) 
-    
-    pl.figure(pnum,figsize=(8,6))
-    pl.clf()
- 
-    im1 = pl.imshow(np.abs(bin2plot), cmap='viridis',
-                    aspect='auto', origin='lower')
-#                        vmin = 100, vmax=3e+3)#,
-                    #extent=[0,new_nfreqs,0,nsamples])
-    #                extent=[0,new_nfreqs,sample_times[0],sample_times[-1]])
-    #im1.axes.set_yticks(range(len(dtimes))[0:-1:int(len(dtimes)/10)])
-    #im1.axes.set_yticklabels(dtimes[0:-1:int(len(dtimes)/10)])
-    pl.xlabel('Frequency (channel id)')
-    pl.ylabel('Time/Delay')
-    pl.colorbar()
-    pl.title(title)
-    pl.ion()
-    pl.show()
-
-    return
