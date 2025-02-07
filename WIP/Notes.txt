@@ -1,6 +1,6 @@
+## Run Code
 
 Add this for Py3...
-
 def my_execfile(fname=''):
     with open(fname, 'r') as f:
         exec(f.read(), globals()) 
@@ -8,21 +8,13 @@ def my_execfile(fname=''):
 
 Or do this...
 
-
 import sys
 sys.path.insert(1, '/Users/rurvashi/SCIwork/RADAR/Code/Radar/WIP')
 from wfplot import *
 
 
-64 MHz sample rate --> 4000 samples per frame ===> 16000 frames per second.
 
-In [2]: 64000000/4000.0
-Out[2]: 16000.0
 
-===> Real time == plot spectra for 16000 frames within 1 second.
 
---------------------
 
--- Multiple antennas in separate panels (in parallel).
--- Run data read and fft+avg remotely, and only transmit spectra to plot over network.
 
