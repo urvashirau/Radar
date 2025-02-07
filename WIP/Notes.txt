@@ -12,6 +12,8 @@ import sys
 sys.path.insert(1, '/Users/rurvashi/SCIwork/RADAR/Code/Radar/WIP')
 from wfplot import *
 
+import sys
+   sys.path.insert(1, '../Code/Radar/WIP')
 
 
 
