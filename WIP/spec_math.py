@@ -12,7 +12,6 @@ from   scipy.io   import  loadmat
 import pickle
 
 ref_mjd = None
-fbuf = 1032  ## 1032 for rtvlba files.  5032 for disk-copied files
 
 ################################################
 ### Helper functions
@@ -36,11 +35,15 @@ def open_file(fname='',mode='rb',seekto=0):
              string : isot time string : 2024-10-30T15:15:00.000000000
     """
     global ref_mjd
-    global fbuf
+
     
     fh = vdif.open(fname,mode)
     fin = fh.info()
     print(fin)
+
+    n4k = int(fin['samples_per_frame']/4000)
+    fbuf = int(n4k*1000 + 32)
+    ###fbuf = 1032  ## 1032 for rtvlba files.  5032 for disk-copied files
 
     print('Samples per frame : %d'%(fin['samples_per_frame']) )
     print('Frame size : %d '%(fbuf))
@@ -91,10 +94,11 @@ def read_frame(fh=None):
 
 
 
-def read_frame_set(fh=None, nframes=1,fsize=4000,fix_drops=True,vb=True):
+def read_frame_set(fh=None, nframes=1,fsize=4000,fix_drops=True,vb=True,frame_time=None):
     data = np.zeros(nframes*fsize);### don't keep allocating each time. reuse.
     atime = None
     fcnt = 0
+    
     prev_time=None
     this_time = None
     while fcnt < nframes:
@@ -103,8 +107,8 @@ def read_frame_set(fh=None, nframes=1,fsize=4000,fix_drops=True,vb=True):
         this_time = atime.mjd
 
         if prev_time != None:
-            if np.abs( this_time - prev_time ) > 1.5*6.25e-05/(24*60*60):
-                nframes_dropped = int( ((this_time - prev_time)*(24*60*60)/(6.25e-05)) ) - 1
+            if np.abs( this_time - prev_time ) > 1.5*frame_time/(24*60*60):
+                nframes_dropped = int( ((this_time - prev_time)*(24*60*60)/(frame_time)) ) - 1
                 if vb==True:
                     print("Frame %d --   Prev time : %3.7f  This time : %3.7f  --- Diff : %d frames"%(fcnt, prev_time, this_time,nframes_dropped) )
 
@@ -514,10 +518,13 @@ def stack_pri_and_match_waveform(fh,nframes,fsize,npri,fint, tint,vb, waveform, 
     dataraw = np.zeros( (int(nframes*fsize/stepsize), npri) ,dtype='float' )
     datatimes = ['' for _ in range(npri)]
 
+    fin = fh.info()
+    frame_time = fin['samples_per_frame']/fin['sample_rate'].value  ## time range per frame. 
+
     atime = None
     prev_time = None
     for pri in range(0,npri):
-        atime, data = read_frame_set(fh, nframes,fsize,fix_drops)
+        atime, data = read_frame_set(fh, nframes,fsize,fix_drops,vb=False,frame_time=frame_time)
         
         if atime is None:
             datastack[:,pri].fill(0.0)
@@ -540,8 +547,8 @@ def stack_pri_and_match_waveform(fh,nframes,fsize,npri,fint, tint,vb, waveform, 
             this_time = atime.mjd
             
             if prev_time != None :
-                if np.abs(this_time - prev_time) > (0.002 + 0.5*(6.25e-05))/(24*60*60) :
-                    nframe_offset = int( ((this_time - prev_time)*(24*60*60)/(6.25e-05))-32 )
+                if np.abs(this_time - prev_time) > (0.002 + 0.5*(frame_time))/(24*60*60) :
+                    nframe_offset = int( ((this_time - prev_time)*(24*60*60)/(frame_time))-32 )
                     print('Offset at PRI : %d  Prev time : %3.8f mjd  This time : %3.8f mjd   Diff : %3.8f frames'%(pri,prev_time, this_time,nframe_offset))
 
                     if fix_drops==True:
@@ -549,7 +556,7 @@ def stack_pri_and_match_waveform(fh,nframes,fsize,npri,fint, tint,vb, waveform, 
                         data = np.roll( data, fsize * nframe_offset)
                         data[: fsize * nframe_offset ] = 0.0
                         ## Re-calc the time array to start from the new (correct) PRP start time.
-                        diff_mjd = diff_mjd - nframe_offset * 6.25e-05
+                        diff_mjd = diff_mjd - nframe_offset * frame_time
                         tim = np.arange( diff_mjd   , diff_mjd + (len(data)*(1/64e+06)) , 1/64e+06 )
                         if (len(tim) > len(data)):
                             dd = len(tim) - len(data)
@@ -585,17 +592,19 @@ def stack_pri_and_match_waveform(fh,nframes,fsize,npri,fint, tint,vb, waveform, 
 
 ### Time averaged spectrum
 def make_spec(fh,mode,fft,nframes, navg=1,fsize=4000,nchans=1000,
-              frange=None,fint=None,vb=True,fix_drops=True):
+              frange=None,fint=None,vb=True,fix_drops=True,frame_time=None):
     """
     """
     global ref_mjd
     fstart,fstop = cut_freqs(fft.frequency.value, frange)
+
+    
 #    avg = np.zeros(fft.frequency_shape[0])
     avg = np.zeros(fstop - fstart)
     atime = None
     avgcnt=0
     for j in range(0,navg):
-        atime1, data1 = read_frame_set(fh, nframes,fsize,fix_drops,vb=False)       
+        atime1, data1 = read_frame_set(fh, nframes,fsize,fix_drops,vb=False,frame_time=frame_time)       
         if atime1 is None:
             continue
         atime = atime1
@@ -641,6 +650,10 @@ def plot_specs(fname='',mode='rb',
     fh = open_file(fname,mode,seekto)
     fsize = fh.info()['samples_per_frame']
 
+    fin = fh.info()
+    frame_time = fin['samples_per_frame']/fin['sample_rate'].value  ## time range per frame. 
+    
+    
     fft,freqs1 = setup_fft(nchans,bw)
     fstart,fstop = cut_freqs(fft.frequency.value, frange)
     new_nfreq = fstop - fstart
@@ -679,7 +692,7 @@ def plot_specs(fname='',mode='rb',
     
     for i in range(0,nsteps):
         tloc = fh.tell()
-        atime, freqs, avg = make_spec(fh,mode,fft,nframes,navg,fsize,nchans,frange,fint,vb,fix_drops)
+        atime, freqs, avg = make_spec(fh,mode,fft,nframes,navg,fsize,nchans,frange,fint,vb,fix_drops,frame_time)
         lmax = np.argmax(np.abs(avg[1:]))
         print("Step %d/%d \t (from %d) \t Max at freq %2.8f MHz is %3.4f \t Time: %s"%(i,nsteps, tloc,freqs[lmax], max(np.abs(avg[1:])), atime.value if atime != None else '---' ))
 
