@@ -35,14 +35,17 @@ def open_file(fname='',mode='rb',seekto=0):
     seekto = integer : nframes
              string : isot time string : 2024-10-30T15:15:00.000000000
     """
-    fbuf = 1032  ## 1032 for rtvlba files.  5032 for disk-copied files
-    
     fh = vdif.open(fname,mode)
     fin = fh.info()
     print(fin)
 
+    n4k = int(fin['samples_per_frame']/4000)
+    fbuf = int(n4k*1000 + 32)
+    ## fbuf = 1032  ## 1032 for rtvlba files.  5032 for disk-copied files
+    
+
     print('Samples per frame : %d'%(fin['samples_per_frame']) )
-    print('Frame size : %d '%(fbuf))
+    print('Frame size : %d bytes '%(fbuf))
     print('Sample rate : %s'%(str(fin['sample_rate'])) )
     print('Sample shape : %s'%(str(fin['sample_shape'])))
 
@@ -66,14 +69,24 @@ def open_file(fname='',mode='rb',seekto=0):
     fh.seek(seek_loc)
             
     ## Read 1 frame (to get the time) and re-seek.
-    atime = fh.read_frame().header.time
-    fh.seek(seek_loc) ## Go back 1 frame
+    #atime = fh.read_frame().header.time
+    #fh.seek(seek_loc) ## Go back 1 frame
+
+    atime = read_time(fh)
+    
     ref_mjd = atime.mjd
 
     print('Location tell() %d and time %s (Ref MJD = %3.8f)'%(fh.tell(),atime.isot,ref_mjd) )
     
     return fh, ref_mjd
 
+
+def read_time(fh=None):
+    cloc = fh.tell()
+    atime = fh.read_frame().header.time
+    print('Current Location %d  and  Time = %s'%(cloc, atime.isot))
+    fh.seek(cloc) ## Go back 1 frame
+    return atime
 
 def read_frame(fh=None):
     try:

@@ -135,6 +135,10 @@ def stack_pri_and_match_waveform(fh,nframes,fsize,npri,fint, tint,vb, waveform, 
     datastack = np.zeros( (int(nframes*fsize/stepsize), npri) ,dtype='complex' )
     datatimes = ['' for _ in range(npri)]
 
+    fin = fh.info()
+    frame_timespan = fin['samples_per_frame']/fin['sample_rate'].value  ## time range per frame. 
+
+    
     atime = None
     prev_time = None
     for pri in range(0,npri):
@@ -158,14 +162,14 @@ def stack_pri_and_match_waveform(fh,nframes,fsize,npri,fint, tint,vb, waveform, 
 
             this_time = atime.mjd
             if prev_time != None:
-                if np.abs(this_time - prev_time) > (0.002 + 0.5*(6.25e-05))/(24*60*60) :
-                    nframe_offset = int( ((this_time - prev_time)*(24*60*60)/(6.25e-05))-32 )
+                if np.abs(this_time - prev_time) > (0.002 + 0.5*(frame_timespan))/(24*60*60) :
+                    nframe_offset = int( ((this_time - prev_time)*(24*60*60)/(frame_timespan))-32 )
                     print('Offset at PRI : %d  Prev time : %3.8f mjd  This time : %3.8f mjd   Diff : %3.8f frames'%(pri,prev_time, this_time,nframe_offset))
                     ## Roll the data array to match this starting time, and pre-fill with zeros.
                     data = np.roll( data, fsize * nframe_offset)
                     data[: fsize * nframe_offset ] = 0.0
                     ## Re-calc the time array to start from the new (correct) PRP start time.
-                    diff_mjd = diff_mjd - nframe_offset * 6.25e-05
+                    diff_mjd = diff_mjd - nframe_offset * frame_timespan
                     tim = np.arange( diff_mjd   , diff_mjd + (len(data)*(1/64e+06)) , 1/64e+06 )
             prev_time = this_time
 
