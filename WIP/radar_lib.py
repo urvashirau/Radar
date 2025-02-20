@@ -81,10 +81,11 @@ def open_file(fname='',mode='rb',seekto=0):
     return fh, ref_mjd
 
 
-def read_time(fh=None):
+def read_time(fh=None,vb=False):
     cloc = fh.tell()
     atime = fh.read_frame().header.time
-    print('Current Location %d  and  Time = %s'%(cloc, atime.isot))
+    if vb==True:
+        print('Current Location %d  and  Time = %s'%(cloc, atime.isot))
     fh.seek(cloc) ## Go back 1 frame
     return atime
 
@@ -119,7 +120,7 @@ def read_stream(fh=None, data=None, times=None, ref_mjd=0):
     nframes = int(nsamples/fsize)
     start_time = times[0] * 1e6  # usec
     end_time = times[-1] * 1e6
-    print("Reading nframes = %d"%(nframes) )
+#    print("Reading nframes = %d"%(nframes) )
 
     now_time = start_time
     
@@ -143,6 +144,88 @@ def read_stream(fh=None, data=None, times=None, ref_mjd=0):
             data[now_index : now_index + fsize] = adata[0:fsize-lost_data]
 
     return
+
+
+def read_frame_set_2(fh=None, data=None, nframes=1,fsize=4000,fix_drops=True,vb=True,frame_time=None):
+    atime = None
+    fcnt = 0
+    
+    prev_time=None
+    this_time = None
+    while fcnt < nframes:
+        atime,oneframe = read_frame(fh)
+
+        this_time = atime.mjd
+
+        if prev_time != None:
+            if np.abs( this_time - prev_time ) > 1.5*frame_time/(24*60*60):
+                nframes_dropped = int( ((this_time - prev_time)*(24*60*60)/(frame_time)) ) - 1
+                if vb==True:
+                    print("Frame %d --   Prev time : %3.7f  This time : %3.7f  --- Diff : %d frames"%(fcnt, prev_time, this_time,nframes_dropped) )
+
+                if fix_drops==True:
+                    for i in range(nframes_dropped):
+                        data[fcnt*fsize : (fcnt+1)*fsize] = 0.0
+                        fcnt = fcnt+1
+                        if fcnt >= nframes:
+                            break
+                    
+
+        prev_time = this_time
+
+        if fcnt < nframes:
+            if atime == None: ## Zero-fill
+                data[fcnt*fsize : (fcnt+1)*fsize] = 0.0
+            else: ## Fill with data
+                data[fcnt*fsize : (fcnt+1)*fsize] = oneframe
+        else:
+            print('Dropped frames cross PRP boundary')
+        
+        fcnt = fcnt+1
+    return atime
+
+
+def read_frame_set(fh=None, nframes=1,fsize=4000,fix_drops=True,vb=True,frame_time=None):
+    data = np.zeros(nframes*fsize);### don't keep allocating each time. reuse.
+    atime = None
+    fcnt = 0
+    
+    prev_time=None
+    this_time = None
+    while fcnt < nframes:
+        atime,oneframe = read_frame(fh)
+
+        this_time = atime.mjd
+
+        if prev_time != None:
+            if np.abs( this_time - prev_time ) > 1.5*frame_time/(24*60*60):
+                nframes_dropped = int( ((this_time - prev_time)*(24*60*60)/(frame_time)) ) - 1
+                if vb==True:
+                    print("Frame %d --   Prev time : %3.7f  This time : %3.7f  --- Diff : %d frames"%(fcnt, prev_time, this_time,nframes_dropped) )
+
+                if fix_drops==True:
+                    for i in range(nframes_dropped):
+                        data[fcnt*fsize : (fcnt+1)*fsize] = 0.0
+                        fcnt = fcnt+1
+                        if fcnt >= nframes:
+                            break
+                    
+
+        prev_time = this_time
+
+        if fcnt < nframes:
+            if atime == None: ## Zero-fill
+                data[fcnt*fsize : (fcnt+1)*fsize] = 0.0
+            else: ## Fill with data
+                data[fcnt*fsize : (fcnt+1)*fsize] = oneframe
+        else:
+            print('Dropped frames cross PRP boundary')
+        
+        fcnt = fcnt+1
+    return atime,data
+
+
+
 
 def get_loc(nowt, srate, time0):
     """

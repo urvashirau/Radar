@@ -36,6 +36,7 @@ def make_spec(fh=None, fft=None,
     ## Empty arrays for the data and times.  Time array starts from zero. Need to add 'current location' to this as needed. 
     sample_data = np.zeros(nsamples, dtype='complex')
     sample_times = np.arange(0,nsamples/srate,1/srate)[0:nsamples] ## seconds
+    print(sample_data.nbytes)
     print("\nMemory allocated for data : %3.2f GB  and times : %3.2f GB"%(sample_data.nbytes*1e-9, sample_times.nbytes*1e-9) )
     ## There is also fdata, and avg to keep track of memory.
    
@@ -51,24 +52,36 @@ def make_spec(fh=None, fft=None,
         ### Print the timerange for this spectrum
         start_time = Time(sample_times[0]/d2s + ref_mjd, format='mjd')
         end_time = Time(sample_times[-1]/d2s + ref_mjd, format='mjd')
-        print("\nTime span of spec : %s to %s"%(start_time.isot, end_time.isot))
+        #print("\nTime span of spec : %s to %s"%(start_time.isot, end_time.isot))
 
         ## Read a data stream to fill the data at the desired timesteps (referenced to ref_mjd)
-        read_stream(fh, sample_data, sample_times, ref_mjd)
+
+        #### NEW
+        #read_stream(fh, sample_data, sample_times, ref_mjd)
+
+        #### OLD
+        #beg_time, sample_data = read_frame_set(fh, nframes, fsize,fix_drops,vb=False,frame_time=frame_timespan)
+        #if beg_time is None:
+        #    continue;
+
+        #### OLD_2
+        beg_time = read_frame_set_2(fh,sample_data,nframes, fsize,fix_drops,vb=False,frame_time=frame_timespan)
+        if beg_time is None:
+            continue;
 
         ### Apply Delay and Doppler correction to the 1D array
         if focus_dop==True and focus_del==True:
-            print("Applying Delay and Doppler corrections from OSOD predictions")
+            #print("Applying Delay and Doppler corrections from OSOD predictions")
             sample_data = delay_shift_frame_set(sample_data, sample_times, tint, vb, ref_mjd)
             sample_data = doppler_shift_frame_set(sample_data, sample_times, fint, vb, ref_mjd)
         if focus_dop==True and focus_del==False:
-            print("Applying only Doppler corrections from OSOD predictions")
+            #print("Applying only Doppler corrections from OSOD predictions")
             sample_data = doppler_shift_frame_set(sample_data, sample_times, fint, vb, ref_mjd)
         if focus_dop==False and focus_del==True:
-            print("Applying only Delay corrections from OSOD predictions")
+            #print("Applying only Delay corrections from OSOD predictions")
             sample_data = delay_shift_frame_set(sample_data, sample_times, tint, vb,ref_mjd)
-        if focus_dop==False and focus_del==False:
-            print("Applying NO Delay or Doppler corrections")
+        #if focus_dop==False and focus_del==False:
+            #print("Applying NO Delay or Doppler corrections")
 
             
         for pdata in range(0,int(len(sample_data)/nchans)):
@@ -77,8 +90,8 @@ def make_spec(fh=None, fft=None,
             avg = avg + np.abs(fdata[fstart:fstop])
             avgcnt = avgcnt+1
 
-        print('Data len', len(sample_data))
-        print('fft len', len(fdata))
+#        print('Data len', len(sample_data))
+#        print('fft len', len(fdata))
 
 #        fdata = do_fft(fft,sample_data)
 #        fdata[int(len(fdata)/2)]=fdata[int(len(fdata)/2)-1]   #### Clip the middle channel
