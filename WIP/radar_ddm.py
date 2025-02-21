@@ -6,6 +6,7 @@ def make_ddm(fname='',mode='rb',
              seekto=1032*0,
              frange=[15.0,16.0], dodop='',
              pname='',vb=True,
+             fix_drops=True,
              focus_dop=True, focus_del=True):
     """
     frange : [start,end] in units of MHz. This is used only for the plot range to display. 
@@ -16,9 +17,11 @@ def make_ddm(fname='',mode='rb',
     ### Open the file and seek to desired location
     d2s = 24*60*60
     fh, ref_mjd = open_file(fname,mode,seekto)
-    fsize = fh.info()['samples_per_frame']
-    srate = fh.info()['sample_rate'].value
-    
+    fin = fh.info()
+    fsize = fin['samples_per_frame']
+    srate = fin['sample_rate'].value
+    frame_timespan = fin['samples_per_frame']/fin['sample_rate'].value  ## time range per frame. 
+  
     ## Total number of samples 
     nsamples = nframes*fsize * npri
 
@@ -65,10 +68,8 @@ def make_ddm(fname='',mode='rb',
         
     ### Allocate the data and time 1D arrays
     sample_data = np.zeros(nsamples, dtype='complex')
-    sample_times = np.arange(0,nsamples/srate,1/srate) ## seconds
-    print("\nMemory allocated for data : %3.2f GB  and times : %3.2f GB"%(sample_data.nbytes*1e-9, sample_times.nbytes*1e-9) )
-    if len(sample_times)>nsamples:
-        sample_times = sample_times[0:nsamples]
+    sample_times = np.arange(0, nsamples/srate,1/srate)[0:nsamples] ## seconds
+    print("\nMemory allocated for data : %3.5f GB  and times : %3.5f GB"%(sample_data.nbytes*1e-9, sample_times.nbytes*1e-9) )
 
     start_time = Time(sample_times[0]/d2s + ref_mjd, format='mjd')
     end_time = Time(sample_times[-1]/d2s + ref_mjd, format='mjd')
@@ -78,7 +79,14 @@ def make_ddm(fname='',mode='rb',
     print("\nSTART PROCESSING\n")
     
     ### Read data into a 1D array
-    read_stream(fh, sample_data, sample_times, ref_mjd)
+    ## NEW 
+    ##read_stream(fh, sample_data, sample_times, ref_mjd)
+
+    #### OLD_2
+    beg_time = read_frame_set_2(fh,sample_data,nframes*npri, fsize,fix_drops,vb=False,frame_time=frame_timespan)
+    if beg_time is None:
+        print('No valid time. Exiting.')
+        return;
     
     ### Apply Delay and Doppler correction to the 1D array
     if focus_dop==True and focus_del==True:
@@ -95,13 +103,14 @@ def make_ddm(fname='',mode='rb',
         print("Applying NO Delay or Doppler corrections")
 
 
+    print("Max data : ",np.max(sample_data))
+        
     ### Reshape to 2D with delay as last axis
     data_matrix_1 = sample_data.reshape([ndopps,ndelays])  ## Make the delay axis the 'fast' one.
     print('Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(sample_data,data_matrix_1) ))
 
     ### Display
     disp_raster(np.transpose(data_matrix_1),pnum=1,title='Data matrix')
-
     
     ### Run correlation on fast time axis
     run_matched_filter(data_matrix_1, wform)
@@ -128,7 +137,7 @@ def make_ddm(fname='',mode='rb',
     return
 
 
-def stack_pri_and_match_waveform(fh,nframes,fsize,npri,fint, tint,vb, waveform, focus_dop, focus_del):
+def stack_pri_and_match_waveform_old(fh,nframes,fsize,npri,fint, tint,vb, waveform, focus_dop, focus_del):
     global ref_mjd
     stepsize = 1
     
