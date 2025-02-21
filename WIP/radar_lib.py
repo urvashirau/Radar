@@ -380,7 +380,9 @@ def bin_2d(arr,np0, np1, fstartfrac=0.1):
     binarr = np.zeros((np0,np1))
     for ii in range(0,np0):
         for jj in range(0,np1):
-            binarr[ii,jj] = np.abs(np.mean(arr[ii*step0:(ii*step0)+step0, jj*step1:(jj*step1)+step1]))
+            binarr[ii,jj] = (np.mean(np.abs(arr[ii*step0:(ii*step0)+step0, jj*step1:(jj*step1)+step1])))
+
+##            binarr[ii,jj] = np.abs(np.mean(arr[ii*step0:(ii*step0)+step0, jj*step1:(jj*step1)+step1]))
 
     binarr = binarr[:,int(fstartfrac*np1):int((1.0-fstartfrac)*np1)]
     return binarr
@@ -553,6 +555,8 @@ def run_matched_filter(datastack,wform):
     """
     shp = datastack.shape
     print('Run a matched filter along the fast-time axis (%d points) for %d PRIs or Doppler bins'%(shp[1],shp[0]))
+
+    print('length for MF : ', len(datastack[0,:]))
     
     for pri in tqdm(range(0,shp[0])):
         datastack[pri,:] = correlate(datastack[pri,:], wform, mode='same')

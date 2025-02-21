@@ -56,9 +56,7 @@ def make_ddm(fname='',mode='rb',
     ## Make the waveform for matched filtering
     start_freq = 1e+6 ##1e+6 #Hz
     end_freq = 31e+6 ##31e+6 #Hz
-    wf_times = np.arange(0,ndelays/srate,1/srate)
-    if len(wf_times)>ndelays:
-        wf_times = wf_times[0:ndelays]
+    wf_times = np.arange(0,ndelays/srate,1/srate)[0:ndelays]
     wform = make_waveform(ndelays, wf_times,start_freq,end_freq)
     #print("Waveform from %3.5f MHz to %3.5f MHz"%(start_freq/1e6, end_freq/1e6))
 
@@ -87,6 +85,15 @@ def make_ddm(fname='',mode='rb',
     if beg_time is None:
         print('No valid time. Exiting.')
         return;
+
+    #### Remove DC.
+    mdata = np.mean((sample_data))
+    print('Mean of input data is  : %3.5f'%(mdata))
+    if mdata<1e-06:
+        print('Mean too low')
+        return
+    else:
+        sample_data = sample_data/mdata
     
     ### Apply Delay and Doppler correction to the 1D array
     if focus_dop==True and focus_del==True:
@@ -103,20 +110,18 @@ def make_ddm(fname='',mode='rb',
         print("Applying NO Delay or Doppler corrections")
 
 
-    print("Max data : ",np.max(sample_data))
-        
     ### Reshape to 2D with delay as last axis
     data_matrix_1 = sample_data.reshape([ndopps,ndelays])  ## Make the delay axis the 'fast' one.
     print('Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(sample_data,data_matrix_1) ))
-
+   
     ### Display
     disp_raster(np.transpose(data_matrix_1),pnum=1,title='Data matrix')
-    
+
     ### Run correlation on fast time axis
     run_matched_filter(data_matrix_1, wform)
 
     ## Reshape to 2D with doppler as last axis
-    data_matrix_2 = data_matrix_1.reshape([ndelays,ndopps]) ## Make doppler axis the 'fast' one.
+    data_matrix_2 = data_matrix_1.transpose() ##reshape([ndelays,ndopps]) ## Make doppler axis the 'fast' one.
     print('Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(sample_data,data_matrix_2) ))
 
     ### Display
