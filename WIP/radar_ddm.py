@@ -115,7 +115,7 @@ def make_ddm(fname='',mode='rb',
     print('Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(sample_data,data_matrix_1) ))
    
     ### Display
-    disp_raster(np.transpose(data_matrix_1),pnum=1,title='Data matrix')
+    #disp_raster(np.transpose(data_matrix_1),pnum=1,title='Data matrix')
 
     ### Run correlation on fast time axis
     run_matched_filter(data_matrix_1, wform)
@@ -125,7 +125,7 @@ def make_ddm(fname='',mode='rb',
     print('Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(sample_data,data_matrix_2) ))
 
     ### Display
-    disp_raster(data_matrix_2,pnum=2,title='After Matched filter')
+    #disp_raster(data_matrix_2,pnum=2,title='After Matched filter')
 
     
     ### Run FFT on slow time axis
