@@ -394,7 +394,7 @@ def bin_2d(arr,np0, np1, fstartfrac=0.0):
     return binarr
 
 
-def resample_2d_avg(array, new_shape):
+def resample_2d_avg(array, new_shape, fstartfrac=0.1):
     """Resamples a 2D array to a new shape by averaging.
 
     Args:
@@ -418,7 +418,7 @@ def resample_2d_avg(array, new_shape):
     ##resampled_array = reshaped_array.mean(axis=(1, 3))
     resampled_array = np.mean(np.abs(reshaped_array),axis=(1, 3))
 
-    return resampled_array
+    return resampled_array[:,int(fstartfrac*new_cols):int((1.0-fstartfrac)*new_cols)]
 
 ## Example usage
 #original_array = np.arange(24).reshape(4, 6)
@@ -602,12 +602,8 @@ def run_matched_filter(datastack,wform):
     shp = datastack.shape
     print('Run a matched filter along the fast-time axis (%d points) for %d PRIs or Doppler bins'%(shp[1],shp[0]))
 
-    print('length for MF : ', len(datastack[0,:]))
     
     for pri in tqdm(range(0,shp[0])):
         datastack[pri,:] = correlate(datastack[pri,:], wform, mode='same')
-
-#        if np.mod(pri, int(shp[0]/10)) == 0:
-#            print('Run M-filter for PRI %d/%d'%(pri,shp[0]))
 
 
