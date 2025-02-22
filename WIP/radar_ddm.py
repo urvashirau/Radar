@@ -81,13 +81,13 @@ def make_ddm(fname='',mode='rb',
     ##read_stream(fh, sample_data, sample_times, ref_mjd)
 
     #### OLD_2
-    beg_time = read_frame_set_2(fh,sample_data,nframes*npri, fsize,fix_drops,vb=False,frame_time=frame_timespan)
+    beg_time = read_frame_set_2(fh,sample_data,nframes*npri, fsize,fix_drops,vb=vb,frame_time=frame_timespan,ref_mjd=ref_mjd)
     if beg_time is None:
         print('No valid time. Exiting.')
         return;
 
     #### Remove DC.
-    mdata = np.mean((sample_data))
+    mdata = np.mean(np.abs(sample_data))
     print('Mean of input data is  : %3.5f'%(mdata))
     if mdata<1e-06:
         print('Mean too low')

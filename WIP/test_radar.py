@@ -87,6 +87,6 @@ def test_ddm_tycho_2sec(myloc='desktop'):
         vfile = vfile_moon_tycho_laptop
         dodop= ddop_moon_tycho_laptop
 
-    make_ddm(fname=vfile,nframes=32,npri=2000,dodop=dodop,seekto=int(5.5e+6 + 12 + 2*32000) ,focus_dop=True,focus_del=True,vb=False,fix_drops=True)
+    make_ddm(fname=vfile,nframes=32,npri=2000,dodop=dodop,seekto=int(5.5e+6 + 6 + 2*32000) ,focus_dop=True,focus_del=True,vb=False,fix_drops=True)
 
         

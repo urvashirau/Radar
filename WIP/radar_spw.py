@@ -167,7 +167,7 @@ def make_spec(fh=None, fft=None,
         #    continue;
 
         #### OLD_2
-        beg_time = read_frame_set_2(fh,sample_data,nframes, fsize,fix_drops,vb=False,frame_time=frame_timespan)
+        beg_time = read_frame_set_2(fh,sample_data,nframes, fsize,fix_drops,vb=vb,frame_time=frame_timespan,ref_mjd=ref_mjd)
         if beg_time is None:
             continue;
 

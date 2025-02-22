@@ -146,29 +146,35 @@ def read_stream(fh=None, data=None, times=None, ref_mjd=0):
     return
 
 
-def read_frame_set_2(fh=None, data=None, nframes=1,fsize=4000,fix_drops=True,vb=True,frame_time=None):
+def read_frame_set_2(fh=None, data=None, nframes=1,fsize=4000,
+                     fix_drops=True,vb=True,frame_time=None,ref_mjd=0.0):
     atime = None
     fcnt = 0
+    d2s = 24*60*60
     
     prev_time=None
     this_time = None
     while fcnt < nframes:
         atime,oneframe = read_frame(fh)
 
-        this_time = atime.mjd
+        this_time = atime.mjd - ref_mjd
 
         if prev_time != None:
-            if np.abs( this_time - prev_time ) > 1.5*frame_time/(24*60*60):
-                nframes_dropped = int( ((this_time - prev_time)*(24*60*60)/(frame_time)) ) - 1
+            tdiff =  ( this_time - prev_time )*d2s/(frame_time) ## For adjacent frames, this wil be 1.0 ( some error bar? )
+            if tdiff<0.0:
+                ### TODO : Handle by going back and filling - there must've been a gap just before! Or DROP it ! 
+                print('tdiff = %3.7f --> Out-of-order frame ! Dropping it. '%(tdiff))
+                continue
+            if int(np.round(np.abs(tdiff))) > 1 :  ## It can be only 1,2,3... 
+                nframes_dropped = int(np.round(np.abs(tdiff))) - 1
                 if vb==True:
-                    print("Frame %d --   Prev time : %3.7f  This time : %3.7f  --- Diff : %d frames"%(fcnt, prev_time, this_time,nframes_dropped) )
+                    print("Frame %d (pri=%d, off=%d) --   Prev time : %3.7f s This time : %3.7f s  --- tdiff : %3.7f  ==  %d frames"%(fcnt,int(fcnt/32),np.mod(fcnt,32) , prev_time*d2s, this_time*d2s, tdiff, nframes_dropped) )
 
                 if fix_drops==True:
                     for i in range(nframes_dropped):
-                        data[fcnt*fsize : (fcnt+1)*fsize] = 0.0
-                        fcnt = fcnt+1
-                        if fcnt >= nframes:
-                            break
+                        if fcnt < nframes:
+                            data[fcnt*fsize : (fcnt+1)*fsize] = 0.0
+                            fcnt = fcnt+1
                     
 
         prev_time = this_time
@@ -179,7 +185,7 @@ def read_frame_set_2(fh=None, data=None, nframes=1,fsize=4000,fix_drops=True,vb=
             else: ## Fill with data
                 data[fcnt*fsize : (fcnt+1)*fsize] = oneframe
         else:
-            print('Dropped frames cross PRP boundary')
+            print('Frame overflows the end of the array (due to zero-fills before it)')
         
         fcnt = fcnt+1
     return atime
@@ -374,7 +380,7 @@ def read_waveform(wname=''):
 
     
 ### Add smarts in this to do the 'mean' in only one dimension, if the input/output dims match
-def bin_2d(arr,np0, np1, fstartfrac=0.1): 
+def bin_2d(arr,np0, np1, fstartfrac=0.0): 
     step0 = int(arr.shape[0]/np0)
     step1 = int(arr.shape[1]/np1)
     binarr = np.zeros((np0,np1))
@@ -386,6 +392,44 @@ def bin_2d(arr,np0, np1, fstartfrac=0.1):
 
     binarr = binarr[:,int(fstartfrac*np1):int((1.0-fstartfrac)*np1)]
     return binarr
+
+
+def resample_2d_avg(array, new_shape):
+    """Resamples a 2D array to a new shape by averaging.
+
+    Args:
+        array: The 2D numpy array to resample.
+        new_shape: A tuple representing the desired shape of the resampled array (rows, cols).
+
+    Returns:
+        A new 2D numpy array with the specified shape, resampled by averaging.
+    """
+
+    old_rows, old_cols = array.shape
+    new_rows, new_cols = new_shape
+
+    row_ratio = old_rows // new_rows
+    col_ratio = old_cols // new_cols
+
+    # Reshape the array to have extra dimensions for averaging
+    reshaped_array = np.abs(array.reshape(new_rows, row_ratio, new_cols, col_ratio))
+
+    # Average along the extra dimensions
+    ##resampled_array = reshaped_array.mean(axis=(1, 3))
+    resampled_array = np.mean(np.abs(reshaped_array),axis=(1, 3))
+
+    return resampled_array
+
+## Example usage
+#original_array = np.arange(24).reshape(4, 6)
+#new_shape = (2, 3)
+#resampled_array = resample_2d_avg(original_array, new_shape)
+#
+#print("Original array:\n", original_array)
+#print("Resampled array:\n", resampled_array)
+#
+
+
 
 def disp_binned_ddm(pfile,np0,np1,frac):
     print('Unpickling..')
@@ -423,7 +467,9 @@ def disp_raster(data=None, pnum=1, title=''):
     shp = data.shape
     nplot_delay = shp[1] ## This needs to be an integer divisor of 128000
     nplot_doppler = shp[1]
-    bin2plot = bin_2d(data,nplot_delay,nplot_doppler) 
+
+    #bin2plot = bin_2d(data,nplot_delay,nplot_doppler) 
+    bin2plot = resample_2d_avg(data,(nplot_delay,nplot_doppler))
     
     pl.figure(pnum,figsize=(8,6))
     pl.clf()
