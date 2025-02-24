@@ -4,13 +4,12 @@ def make_ddm(fname='',mode='rb',
              nframes=1, npri=1, ### nframes per PRP  x  n PRP
              #bw=32.0,
              seekto=1032*0,
-             frange=[15.0,16.0], dodop='',
+             frange=[0.08,0.20], dodop='',
              pname='',vb=True,
              fix_drops=True,
              focus_dop=True, focus_del=True):
     """
-    frange : [start,end] in units of MHz. This is used only for the plot range to display. 
-                  None is the full range. 
+    frange : [start,end] : Fraction of the frequency range to display :  Tycho-Oct30 : 0.12 - 0.223
     dodop : File name from osod.  Empty string means 'no doppler correction'.
     """
 
@@ -51,6 +50,10 @@ def make_ddm(fname='',mode='rb',
         print("\nReference Doppler Shift : %3.6f Hz  ( %3.6f MHz )"%(ref_dop, ref_dop/1e+6) )
         ref_del = tint(ref_mjd)
         print("Reference Delay Shift : %3.6f sec  ( %3.6f microsec )"%(ref_del, ref_del*1e+6) )
+    else: ## dodop=''
+        focus_del=False
+        focus_dop=False
+        print('No Del-Dop tracking model')
 
 
     ## Make the waveform for matched filtering
@@ -98,14 +101,14 @@ def make_ddm(fname='',mode='rb',
     ### Apply Delay and Doppler correction to the 1D array
     if focus_dop==True and focus_del==True:
         print("Applying Delay and Doppler corrections from OSOD predictions")
-        sample_data = delay_shift_frame_set(sample_data, sample_times, tint, vb, ref_mjd)
-        sample_data = doppler_shift_frame_set(sample_data, sample_times, fint, vb, ref_mjd)
+        delay_shift_frame_set_2(sample_data, sample_times, tint, vb, ref_mjd)
+        doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd)
     if focus_dop==True and focus_del==False:
         print("Applying only Doppler corrections from OSOD predictions")
-        sample_data = doppler_shift_frame_set(sample_data, sample_times, fint, vb, ref_mjd)
+        doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd)
     if focus_dop==False and focus_del==True:
         print("Applying only Delay corrections from OSOD predictions")
-        sample_data = delay_shift_frame_set(sample_data, sample_times, tint, vb,ref_mjd)
+        delay_shift_frame_set_2(sample_data, sample_times, tint, vb,ref_mjd)
     if focus_dop==False and focus_del==False:
         print("Applying NO Delay or Doppler corrections")
 
@@ -131,81 +134,13 @@ def make_ddm(fname='',mode='rb',
     ### Run FFT on slow time axis
     take_fft(data_matrix_2, fft)
 
-    if pname != '':
-        print('Pickling DDM array of shape ', data_matrix_2.shape)
-        with open(pname+'.pkl','wb') as f:
-            pickle.dump(data_matrix_2,f)
+#    if pname != '':
+#        print('Pickling DDM array of shape ', data_matrix_2.shape)
+#        with open(pname+'.pkl','wb') as f:
+#            pickle.dump(data_matrix_2,f)
 
     ### Display
-    disp_raster(data_matrix_2,pnum=3,title='After Doppler FFT')
+    disp_raster(data_matrix_2,pnum=3,title='After Doppler FFT',pname=pname,frange=frange)
 
     return
-
-
-def stack_pri_and_match_waveform_old(fh,nframes,fsize,npri,fint, tint,vb, waveform, focus_dop, focus_del):
-    global ref_mjd
-    stepsize = 1
-    
-    datastack = np.zeros( (int(nframes*fsize/stepsize), npri) ,dtype='complex' )
-    datatimes = ['' for _ in range(npri)]
-
-    fin = fh.info()
-    frame_timespan = fin['samples_per_frame']/fin['sample_rate'].value  ## time range per frame. 
-
-    
-    atime = None
-    prev_time = None
-    for pri in range(0,npri):
-        atime, data = read_frame_set(fh, nframes,fsize)
-        
-        if atime is None:
-            datastack[:,pri].fill(0.0)
-            datatimes[pri] = '-------'
-
-        else:
-            ### Calculate a time array
-            d2s = 24*60*60
-            diff_mjd = (atime.mjd - ref_mjd)*d2s  ## seconds. 
-            tim = np.arange( diff_mjd   , diff_mjd + (len(data)*(1/64e+06)) , 1/64e+06 )  ##### HARD CODED for 64 MHz sampling.
-            #tim = tim + ref_mjd*d2s.
-
-            if (len(tim) > len(data)):
-                dd = len(tim) - len(data)
-                tim = tim[dd:len(tim)]
-
-
-            this_time = atime.mjd
-            if prev_time != None:
-                if np.abs(this_time - prev_time) > (0.002 + 0.5*(frame_timespan))/(24*60*60) :
-                    nframe_offset = int( ((this_time - prev_time)*(24*60*60)/(frame_timespan))-32 )
-                    print('Offset at PRI : %d  Prev time : %3.8f mjd  This time : %3.8f mjd   Diff : %3.8f frames'%(pri,prev_time, this_time,nframe_offset))
-                    ## Roll the data array to match this starting time, and pre-fill with zeros.
-                    data = np.roll( data, fsize * nframe_offset)
-                    data[: fsize * nframe_offset ] = 0.0
-                    ## Re-calc the time array to start from the new (correct) PRP start time.
-                    diff_mjd = diff_mjd - nframe_offset * frame_timespan
-                    tim = np.arange( diff_mjd   , diff_mjd + (len(data)*(1/64e+06)) , 1/64e+06 )
-            prev_time = this_time
-
-
-            ### Apply the Delay and Doppler Tracking    
-            if focus_dop==True and focus_del==True:
-                data0 = delay_shift_frame_set(data, tim, tint, vb, ref_mjd)
-                data1 = doppler_shift_frame_set_2(data0, tim, fint, vb, ref_mjd)
-            if focus_dop==True and focus_del==False:
-                data1 = doppler_shift_frame_set_2(data, tim, fint, vb, ref_mjd)
-            if focus_dop==False and focus_del==True:
-                data1 = delay_shift_frame_set(data, tim, tint, vb,ref_mjd)
-            if focus_dop==False and focus_del==False:
-                data1 = data
-           
-            datastack[:,pri] = correlate(data1, waveform, mode='same')
-        
-            datatimes[pri] = atime.value[11:24]
-
-
-        if np.mod(pri, int(npri/10)) == 0:
-            print('For pri %d/%d (%s) the max is %3.5f at index %d'%(pri,npri,datatimes[pri],np.max(np.abs(datastack[:,pri])),np.argmax(np.abs(datastack[:,pri]))))
-
-    return datastack, datatimes
 

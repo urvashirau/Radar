@@ -57,6 +57,10 @@ def plot_specs(fname='',mode='rb',
         ref_del = tint(ref_mjd)
         print("\nReference Delay : %3.6f s  ( %3.6f micro-sec )\n"%(ref_del, ref_del*1e+6) )
         print("\nReference Doppler Shift : %3.6f Hz  ( %3.6f MHz )\n"%(ref_dop, ref_dop/1e+6) )
+    else: ## dodop=''
+        focus_del=False
+        focus_dop=False
+        print('No Del-Dop tracking model')
 
     
     #pl.ion()
@@ -174,14 +178,14 @@ def make_spec(fh=None, fft=None,
         ### Apply Delay and Doppler correction to the 1D array
         if focus_dop==True and focus_del==True:
             #print("Applying Delay and Doppler corrections from OSOD predictions")
-            sample_data = delay_shift_frame_set(sample_data, sample_times, tint, vb, ref_mjd)
-            sample_data = doppler_shift_frame_set(sample_data, sample_times, fint, vb, ref_mjd)
+            delay_shift_frame_set_2(sample_data, sample_times, tint, vb, ref_mjd)
+            doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd)
         if focus_dop==True and focus_del==False:
             #print("Applying only Doppler corrections from OSOD predictions")
-            sample_data = doppler_shift_frame_set(sample_data, sample_times, fint, vb, ref_mjd)
+            doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd)
         if focus_dop==False and focus_del==True:
             #print("Applying only Delay corrections from OSOD predictions")
-            sample_data = delay_shift_frame_set(sample_data, sample_times, tint, vb,ref_mjd)
+            delay_shift_frame_set_2(sample_data, sample_times, tint, vb,ref_mjd)
         #if focus_dop==False and focus_del==False:
             #print("Applying NO Delay or Doppler corrections")
 

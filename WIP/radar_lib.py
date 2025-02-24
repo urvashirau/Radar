@@ -163,7 +163,7 @@ def read_frame_set_2(fh=None, data=None, nframes=1,fsize=4000,
             tdiff =  ( this_time - prev_time )*d2s/(frame_time) ## For adjacent frames, this wil be 1.0 ( some error bar? )
             if tdiff<0.0:
                 ### TODO : Handle by going back and filling - there must've been a gap just before! Or DROP it ! 
-                print('tdiff = %3.7f --> Out-of-order frame ! Dropping it. '%(tdiff))
+                print('Frame %d (pri=%d, off=%d) : tdiff = %3.7f --> Out-of-order frame ! Dropping it. '%(fcnt,int(fcnt/32),np.mod(fcnt,32),tdiff))
                 continue
             if int(np.round(np.abs(tdiff))) > 1 :  ## It can be only 1,2,3... 
                 nframes_dropped = int(np.round(np.abs(tdiff))) - 1
@@ -246,7 +246,7 @@ def get_loc(nowt, srate, time0):
 
 
 ## Apply time varying dopper shift, based on "fint", and interpolation function. 
-def doppler_shift_frame_set(data, tim, fint=None, vb=True, ref_mjd=None):
+def doppler_shift_frame_set_2(data=None, tim=None, fint=None, vb=True, ref_mjd=None):
     """
     Apply Doppler corrections to the time series, prior to the FFTs
     ref_amp*np.exp((0+1j)*(2*np.pi*doppler*tim)
@@ -256,29 +256,36 @@ def doppler_shift_frame_set(data, tim, fint=None, vb=True, ref_mjd=None):
     fint : Doppler shift interp1d function (from scipy.interpolate)
 
     """
-    d2s = 24*60*60
+    if fint == None:
+        print('Error. Empty Doppler model')
+        return
     
-    if fint != None:
-        ref_dop = fint( ref_mjd )
-        dop = -0.5 * ( fint( (tim/d2s + ref_mjd) ) - ref_dop  )
-    else:
-        ref_dop = 0.0
-        dop = np.zeros( len(tim) )
+    d2s = 24*60*60    
+    ref_dop = fint( ref_mjd )
 
-    if vb==True:
-        Ttim1 = Time(tim[0]/d2s + ref_mjd ,format='mjd')
-        Ttim2 = Time(tim[len(tim)-1]/d2s + ref_mjd, format='mjd')
-        print("MJDrange : %s - %s  --> Doppler offsets : %3.6f -- %3.6f Hz"%(Ttim1.isot,Ttim2.isot,dop[0],dop[len(dop)-1]))
+#    if vb==True:
+#    Ttim1 = Time(tim[0]/d2s + ref_mjd ,format='mjd')
+#    Ttim2 = Time(tim[len(tim)-1]/d2s + ref_mjd, format='mjd')
+#    print("MJDrange : %s - %s  --> Doppler offsets : %3.6f -- %3.6f Hz"%(Ttim1.isot,Ttim2.isot,dop[0],dop[len(dop)-1]))
 
-    if fint != None:
-        sdata = data * np.exp((0+1j)*(2*np.pi*dop*tim))
-        return sdata
-    else:
-        return data
+    psize = 4000 * 32 ### Pick some nsamples to break up the long list.
+
+    nsamples = len(data)
+    
+    for pbeg in tqdm(range(0,nsamples,psize)):
+        pend = pbeg + psize
+        if pend > nsamples:
+            pend = nsamples
+    
+        dop = -0.5 * ( fint( (tim[pbeg:pend]/d2s + ref_mjd) ) - ref_dop  )
+
+        data[pbeg:pend] = data[pbeg:pend] * np.exp((0+1j)*(2*np.pi*dop*tim[pbeg:pend]))
+
+    return
 
 
 ## Apply time varying delay correction, based on "tint", and interpolation function. 
-def delay_shift_frame_set(data, tim, tint=None, vb=True,ref_mjd=None):
+def delay_shift_frame_set_2(data=None, tim=None, tint=None, vb=True,ref_mjd=None):
     """
     Apply Delay corrections to the time series, prior to the FFTs
      
@@ -287,38 +294,124 @@ def delay_shift_frame_set(data, tim, tint=None, vb=True,ref_mjd=None):
     tint : Delay shift interp1d function (from scipy.interpolate)
 
     """
+    if tint == None:
+        print('Error. Empty Delay model')
+        return
+    
     d2s = 24*60*60
 
     ## delr is the list of 'time delay', interpolated onto the data timesteps. 
-    if tint != None:
-        ref_del = tint( ref_mjd )
-        delr = +1.0 * ( tint( (tim/d2s + ref_mjd) ) - ref_del  )
-    else:
-        ref_del = 0.0
-        delr = np.zeros( len(tim) )       
+    ref_del = tint( ref_mjd )
+
+#    if vb==True:
+#        Ttim1 = Time(tim[0]/d2s + ref_mjd ,format='mjd')
+#        Ttim2 = Time(tim[len(tim)-1]/d2s + ref_mjd, format='mjd')
+#        print("MJDrange : %s - %s  --> Delay offsets :  %3.6f -- %3.6f microsec"%(Ttim1.isot,Ttim2.isot,delr[0]*1e+6,delr[len(delr)-1]*1e+6))
+
+    psize = 4000 * 32  ### Pick some nsamples to break up the long list.
+    pbuf = 4000 * 16   ### Amount to add to each side, for the dat/tim dint calculation
+
+    nsamples = len(data)
+    
+    for pbeg in tqdm(range(0,nsamples,psize)):
+        pend = pbeg + psize
+        if pend > nsamples:
+            pend = nsamples
+
+        delr = +1.0 * ( tint( (tim[pbeg:pend]/d2s + ref_mjd) ) - ref_del  )      
+
+        ## delayed time is tim + delr
+        del_tim = tim[pbeg:pend] + delr
+        
+        ## Construct interpolation function for data at original timesteps. Use a larger span than pbeg:pend to cover delr
+        ibeg = pbeg - pbuf
+        if ibeg < 0:
+            ibeg=0
+        iend = pend + pbuf
+        if iend > nsamples:
+            iend = nsamples
+        dint = interpol.interp1d(tim[ibeg:iend],data[ibeg:iend], fill_value=0.0,bounds_error=False)
+
+        ##dint = interpol.interp1d(tim,data,fill_value='extrapolate',bounds_error=False)
+        ##dint = interpol.CubicSpline(tim, data, extrapolate=True)
+        
+        ## Interpolate data onto delayed timesteps.
+        data[pbeg:pend] = dint(del_tim)
+        #print('Max del_data is %3.5f at %d'% ( np.max(np.abs(del_data)),  np.argmax(np.abs(del_data)) ) )
+
+    return 
+
+
+## Apply time varying dopper shift, based on "fint", and interpolation function. 
+def doppler_shift_frame_set(data=None, tim=None, fint=None, vb=True, ref_mjd=None):
+    """
+    Apply Doppler corrections to the time series, prior to the FFTs
+    ref_amp*np.exp((0+1j)*(2*np.pi*doppler*tim)
+    
+    data : 1D array of time series, before the FFT
+    end_mjd : MJD of the end of the frame set
+    fint : Doppler shift interp1d function (from scipy.interpolate)
+
+    """
+    if fint == None:
+        print('Error. Empty Doppler model')
+        return
+    
+    d2s = 24*60*60
+    
+    ref_dop = fint( ref_mjd )
+    dop = -0.5 * ( fint( (tim/d2s + ref_mjd) ) - ref_dop  )
+
+    if vb==True:
+        Ttim1 = Time(tim[0]/d2s + ref_mjd ,format='mjd')
+        Ttim2 = Time(tim[len(tim)-1]/d2s + ref_mjd, format='mjd')
+        print("MJDrange : %s - %s  --> Doppler offsets : %3.6f -- %3.6f Hz"%(Ttim1.isot,Ttim2.isot,dop[0],dop[len(dop)-1]))
+
+    data[:] = data[:] * np.exp((0+1j)*(2*np.pi*dop*tim))
+
+    return
+
+
+## Apply time varying delay correction, based on "tint", and interpolation function. 
+def delay_shift_frame_set(data=None, tim=None, tint=None, vb=True,ref_mjd=None):
+    """
+    Apply Delay corrections to the time series, prior to the FFTs
+     
+    data : 1D array of time series, before the FFT
+    end_mjd : MJD of the end of the frame set
+    tint : Delay shift interp1d function (from scipy.interpolate)
+
+    """
+    if tint == None:
+        print('Error. Empty Delay model')
+        return
+    
+    d2s = 24*60*60
+
+    ## delr is the list of 'time delay', interpolated onto the data timesteps. 
+    ref_del = tint( ref_mjd )
+    delr = +1.0 * ( tint( (tim/d2s + ref_mjd) ) - ref_del  )      
         
     if vb==True:
         Ttim1 = Time(tim[0]/d2s + ref_mjd ,format='mjd')
         Ttim2 = Time(tim[len(tim)-1]/d2s + ref_mjd, format='mjd')
         print("MJDrange : %s - %s  --> Delay offsets :  %3.6f -- %3.6f microsec"%(Ttim1.isot,Ttim2.isot,delr[0]*1e+6,delr[len(delr)-1]*1e+6))
 
-    if tint != None:
-        ## delayed time is tim + delr
-        del_tim = tim + delr
-        ## Construct interpolation function for data at original timesteps.
-        if len(tim) != len(data):
-            print("HEY !!", len(tim), len(data))
-        dint = interpol.interp1d(tim,data, fill_value=0.0,bounds_error=False)
-        ##dint = interpol.interp1d(tim,data,fill_value='extrapolate',bounds_error=False)
-        ##dint = interpol.CubicSpline(tim, data, extrapolate=True)
-        ## Interpolate data onto delayed timesteps.
-        del_data = dint(del_tim)
-        #print('Max del_data is %3.5f at %d'% ( np.max(np.abs(del_data)),  np.argmax(np.abs(del_data)) ) )
-        return del_data
-    else:
-        return data
 
+    ## delayed time is tim + delr
+    del_tim = tim + delr
+    ## Construct interpolation function for data at original timesteps.
+    if len(tim) != len(data):
+        print("HEY !!", len(tim), len(data))
+    dint = interpol.interp1d(tim,data, fill_value=0.0,bounds_error=False)
+    ##dint = interpol.interp1d(tim,data,fill_value='extrapolate',bounds_error=False)
+    ##dint = interpol.CubicSpline(tim, data, extrapolate=True)
 
+    ## Interpolate data onto delayed timesteps.
+    data[:] = dint(del_tim)
+    #print('Max del_data is %3.5f at %d'% ( np.max(np.abs(del_data)),  np.argmax(np.abs(del_data)) ) )
+
+    return 
     
 ## Other helper methods. 
     
@@ -459,7 +552,7 @@ def disp_binned_ddm(pfile,np0,np1,frac):
 
 
 
-def disp_raster(data=None, pnum=1, title=''):
+def disp_raster(data=None, pnum=1, title='',pname='',frange=None):
     """
         datastack = [ ndelays, ndopps ]
     """
@@ -487,6 +580,18 @@ def disp_raster(data=None, pnum=1, title=''):
     pl.title(title)
     pl.ion()
     pl.show()
+
+    if frange!=None:
+        x1 = frange[0] * nplot_doppler
+        x2 = frange[1] * nplot_doppler
+        pl.xlim([x1,x2])
+
+    if pname != '':
+        pl.savefig(pname+'.png')
+        print('Pickling DDM array of shape ', bin2plot.shape)
+        with open(pname+'.pkl','wb') as f:
+            pickle.dump(bin2plot,f)
+
 
     return
 

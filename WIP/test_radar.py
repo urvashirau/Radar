@@ -87,9 +87,8 @@ def test_ddm_tycho_2sec(myloc='desktop',npri=1000):
         vfile = vfile_moon_tycho_laptop
         dodop= ddop_moon_tycho_laptop
 
-    make_ddm(fname=vfile,nframes=32,npri=npri,dodop=dodop,seekto=int(5.5e+6 + 14 + 2*32000) ,focus_dop=True,focus_del=True,vb=False,fix_drops=True)
-    x0 = 0.12*0.8*npri
-    x1 = 0.23*0.8*npri
-    pl.xlim([x0,x1])
+
+    make_ddm(fname=vfile,nframes=32,npri=npri,dodop=dodop,seekto=int(5.5e+6 + 14 + 2*32000) ,focus_dop=True,focus_del=True,vb=False,fix_drops=True,frange=[0.08,0.20])
+
     pl.savefig('tfig_ddm_'+str(npri)+'.png')
 
