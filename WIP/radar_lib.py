@@ -12,6 +12,7 @@ from   scipy.io   import  loadmat
 import pickle
 from tqdm import tqdm
 import time
+import gc
 
 
 ################################################
@@ -151,11 +152,14 @@ def read_frame_set_2(fh=None, data=None, nframes=1,fsize=4000,
     atime = None
     fcnt = 0
     d2s = 24*60*60
+
+    pbar = tqdm(desc='Reading',total=nframes)
     
     prev_time=None
     this_time = None
     while fcnt < nframes:
         atime,oneframe = read_frame(fh)
+        pbar.update(1)
 
         this_time = atime.mjd - ref_mjd
 
@@ -188,6 +192,8 @@ def read_frame_set_2(fh=None, data=None, nframes=1,fsize=4000,
             print('Frame overflows the end of the array (due to zero-fills before it)')
         
         fcnt = fcnt+1
+        
+    pbar.close()
     return atime
 
 
@@ -246,7 +252,7 @@ def get_loc(nowt, srate, time0):
 
 
 ## Apply time varying dopper shift, based on "fint", and interpolation function. 
-def doppler_shift_frame_set_2(data=None, tim=None, fint=None, vb=True, ref_mjd=None):
+def doppler_shift_frame_set_2(data=None, tim=None, fint=None, vb=True, ref_mjd=None,offset=0.0):
     """
     Apply Doppler corrections to the time series, prior to the FFTs
     ref_amp*np.exp((0+1j)*(2*np.pi*doppler*tim)
@@ -261,7 +267,7 @@ def doppler_shift_frame_set_2(data=None, tim=None, fint=None, vb=True, ref_mjd=N
         return
     
     d2s = 24*60*60    
-    ref_dop = fint( ref_mjd )
+    ref_dop = fint( ref_mjd ) + offset
 
 #    if vb==True:
 #    Ttim1 = Time(tim[0]/d2s + ref_mjd ,format='mjd')
@@ -487,7 +493,7 @@ def bin_2d(arr,np0, np1, fstartfrac=0.0):
     return binarr
 
 
-def resample_2d_avg(array, new_shape, fstartfrac=0.0):
+def resample_2d_avg(array, new_shape, fstartfrac=0.0,coherent=False):
     """Resamples a 2D array to a new shape by averaging.
 
     Args:
@@ -504,13 +510,18 @@ def resample_2d_avg(array, new_shape, fstartfrac=0.0):
     row_ratio = old_rows // new_rows
     col_ratio = old_cols // new_cols
 
-    # Reshape the array to have extra dimensions for averaging
-    reshaped_array = np.abs(array.reshape(new_rows, row_ratio, new_cols, col_ratio))
+    if coherent==False: ## incoherent averaging
+        # Reshape the array to have extra dimensions for averaging
+        reshaped_array = array.reshape(new_rows, row_ratio, new_cols, col_ratio)
+        # Average along the extra dimensions -- this allocates memory too.... 
+        resampled_array = np.mean(np.abs(reshaped_array),axis=(1, 3))
+    else:  ## coherent averaging
+        # Reshape the array to have extra dimensions for averaging
+        reshaped_array = array.reshape(new_rows, row_ratio, new_cols, col_ratio)
+        # Average along the extra dimensions
+        resampled_array = np.mean(reshaped_array,axis=(1, 3))
 
-    # Average along the extra dimensions
-    ##resampled_array = reshaped_array.mean(axis=(1, 3))
-    resampled_array = np.mean(np.abs(reshaped_array),axis=(1, 3))
-
+        
     return resampled_array[:,int(fstartfrac*new_cols):int((1.0-fstartfrac)*new_cols)]
 
 ## Example usage
@@ -554,17 +565,27 @@ def disp_binned_ddm(pfile,np0,np1,frac):
 
 
 
-def disp_raster(data=None, pnum=1, title='',pname='',frange=None):
+def disp_raster(data=None, pnum=1, title='',pname='',frange=None,xaxis='',
+                nplot_delay=None,nplot_doppler=None,
+                slow_time_inc=0.0,slow_time_span=0.0):
     """
         datastack = [ ndelays, ndopps ]
+        xaxis='dopp' -- Frequency on the x axis. 
+        xaxis= 'time' -- Slow Time on the x axis.
     """
     print('Binning %s for plotting'%(title))
     shp = data.shape
-    nplot_delay = shp[1] ## This needs to be an integer divisor of 128000
-    nplot_doppler = shp[1]
 
-    #bin2plot = bin_2d(data,nplot_delay,nplot_doppler) 
-    bin2plot = resample_2d_avg(data,(nplot_delay,nplot_doppler))
+    if nplot_delay==None or nplot_doppler==None:
+        nplot_delay = shp[1] ## This needs to be an integer divisor of 128000
+        nplot_doppler = shp[1]
+
+    #bin2plot = bin_2d(data,nplot_delay,nplot_doppler)
+
+    if nplot_delay < shp[0] or nplot_doppler < shp[1]:
+        bin2plot = resample_2d_avg(data,(nplot_delay,nplot_doppler))
+    else:
+        bin2plot = data
     
     pl.figure(pnum,figsize=(8,6))
     pl.clf()
@@ -576,7 +597,10 @@ def disp_raster(data=None, pnum=1, title='',pname='',frange=None):
     #                extent=[0,new_nfreqs,sample_times[0],sample_times[-1]])
     #im1.axes.set_yticks(range(len(dtimes))[0:-1:int(len(dtimes)/10)])
     #im1.axes.set_yticklabels(dtimes[0:-1:int(len(dtimes)/10)])
-    pl.xlabel('Frequency (channel id)')
+    if xaxis=='time':
+        pl.xlabel('Slow Time -> 0 to %3.2f sec'%(slow_time_span) )
+    if xaxis=='dopp':
+        pl.xlabel('Doppler Frequency => 0 to %3.2f Hz'%(1.0/(slow_time_inc)) )
     pl.ylabel('Time/Delay')
     pl.colorbar()
     pl.title(title)

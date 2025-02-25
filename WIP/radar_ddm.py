@@ -7,10 +7,13 @@ def make_ddm(fname='',mode='rb',
              frange=[0.08,0.20], dodop='',
              pname='',vb=True,
              fix_drops=True,
-             focus_dop=True, focus_del=True, debug=False):
+             focus_dop=True, focus_del=True,
+             debug=False, dop_offset=0.0,
+             cavg_factor=1.0):
     """
     frange : [start,end] : Fraction of the frequency range to display :  Tycho-Oct30 : 0.12 - 0.223
     dodop : File name from osod.  Empty string means 'no doppler correction'.
+    dop_offset : In Hz, apply an extra Doppler offset to move the DDM signal to lower or higher frequencies.
     """
 
     t1 = time.time()
@@ -49,7 +52,7 @@ def make_ddm(fname='',mode='rb',
     if dodop != '':
         fint, tint = read_doppler_and_delay(dodop)
         ref_dop = fint(ref_mjd)
-        print("\nReference Doppler Shift : %3.6f Hz  ( %3.6f MHz )"%(ref_dop, ref_dop/1e+6) )
+        print("\nReference Doppler Shift : %3.6f Hz  ( %3.6f MHz ) with offset : %3.6f Hz"%(ref_dop, ref_dop/1e+6, dop_offset) )
         ref_del = tint(ref_mjd)
         print("Reference Delay Shift : %3.6f sec  ( %3.6f microsec )"%(ref_del, ref_del*1e+6) )
     else: ## dodop=''
@@ -72,11 +75,16 @@ def make_ddm(fname='',mode='rb',
     ### Allocate the data and time 1D arrays
     sample_data = np.zeros(nsamples, dtype='complex')
     sample_times = np.arange(0, nsamples/srate,1/srate)[0:nsamples] ## seconds
-    print("\nMemory allocated for data : %3.5f GB  and times : %3.5f GB"%(sample_data.nbytes*1e-9, sample_times.nbytes*1e-9) )
+    print("\nMEMORY allocated for data : %3.5f GB  and times : %3.5f GB"%(sample_data.nbytes*1e-9, sample_times.nbytes*1e-9) )
 
     start_time = Time(sample_times[0]/d2s + ref_mjd, format='mjd')
     end_time = Time(sample_times[-1]/d2s + ref_mjd, format='mjd')
     print("\nTime span of entire DDM : %s to %s"%(start_time.isot, end_time.isot))
+
+    slow_time_inc = ndelays/srate  ### Multiply by coherent averaging timescale. 
+    slow_time_span = slow_time_inc * npri
+
+    print('Doppler Frequency span : 0 to 3.2f Hz'%(1.0/slow_time_inc) )
     print("Number of Delay bins : %d    Number of Doppler bins : %d\n"%(ndelays, ndopps) )
 
     print("\nSTART PROCESSING\n")
@@ -86,68 +94,88 @@ def make_ddm(fname='',mode='rb',
     ##read_stream(fh, sample_data, sample_times, ref_mjd)
 
     #### OLD_2
+    print('Reading %d M samples'%(len(sample_data)/1e+6) )
     beg_time = read_frame_set_2(fh,sample_data,nframes*npri, fsize,fix_drops,vb=vb,frame_time=frame_timespan,ref_mjd=ref_mjd)
     if beg_time is None:
         print('No valid time. Exiting.')
         return;
 
-    #### Remove DC.
-    mdata = np.mean(np.abs(sample_data))
-    print('Mean of input data is  : %3.5f'%(mdata))
-    if mdata<1e-06:
-        print('Mean too low')
-        return
-    else:
-        sample_data /= mdata
-    
     ### Apply Delay and Doppler correction to the 1D array
+
     if focus_dop==True and focus_del==True:
         print("Applying Delay and Doppler corrections from OSOD predictions")
         delay_shift_frame_set_2(sample_data, sample_times, tint, vb, ref_mjd)
-        doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd)
+        doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd,dop_offset)
     if focus_dop==True and focus_del==False:
         print("Applying only Doppler corrections from OSOD predictions")
-        doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd)
+        doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd,dop_offset)
     if focus_dop==False and focus_del==True:
         print("Applying only Delay corrections from OSOD predictions")
-        delay_shift_frame_set_2(sample_data, sample_times, tint, vb,ref_mjd)
+        delay_shift_frame_set_2(sample_data, sample_times, tint, vb,ref_mjd,dop_offset)
     if focus_dop==False and focus_del==False:
         print("Applying NO Delay or Doppler corrections")
 
 
+    ### Delete sample_times and free up the mem.
+    del sample_times
+        
     ### Reshape to 2D with delay as last axis
     data_matrix_1 = sample_data.reshape([ndopps,ndelays])  ## Make the delay axis the 'fast' one.
     print('Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(sample_data,data_matrix_1) ))
-   
+
+    if cavg_factor > 1:
+        print('Apply coherent averaging along the slow-time axis x %d'%(cavg_factor))
+        data_matrix_1 = resample_2d_avg( data_matrix_1, (int(ndopps/cavg_factor), ndelays) ,coherent=True)
+        slow_time_inc = slow_time_inc * cavg_factor
+        ## Release memory from original array. 
+        del sample_data
+        gc.collect()
+
+    print('\nMEMORY needed for averaged matrix : %3.4f GB'%(data_matrix_1.nbytes*1e-9))
+
     ### Display
     if debug==True:
-        disp_raster(np.transpose(data_matrix_1),pnum=1,title='Data matrix')
+        disp_raster(np.transpose(data_matrix_1),pnum=1,title='Data matrix',xaxis='time',slow_time_inc=slow_time_inc,slow_time_span=slow_time_span)
 
+    #### Remove DC.
+    mdata = np.mean(np.abs(data_matrix_1))
+    print('Remove DC (mean of input data is  : %3.5f)'%(mdata))
+    data_matrix_1  -= mdata
+    
     ### Run correlation on fast time axis
     run_matched_filter(data_matrix_1, wform)
 
     ## Reshape to 2D with doppler as last axis
     data_matrix_2 = data_matrix_1.transpose() ##reshape([ndelays,ndopps]) ## Make doppler axis the 'fast' one.
-    print('Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(sample_data,data_matrix_2) ))
+    print('Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(data_matrix_1,data_matrix_2) ))
 
     ### Display
     if debug==True:
-        disp_raster(data_matrix_2,pnum=2,title='After Matched filter')
+        disp_raster(data_matrix_2,pnum=2,title='After Matched filter',xaxis='time',slow_time_inc=slow_time_inc,slow_time_span=slow_time_span)
 
     
     ### Run FFT on slow time axis
     take_fft(data_matrix_2, fft)
 
+    
     if pname != '':
         print('Pickling DDM array of shape ', data_matrix_2.shape)
         with open(pname+'_fullres.pkl','wb') as f:
             pickle.dump(data_matrix_2,f)
 
     ### Display
-    disp_raster(data_matrix_2,pnum=3,title='After Doppler FFT',pname=pname,frange=frange)
+    disp_raster(data_matrix_2,pnum=3,title='After Doppler FFT',pname=pname,frange=frange,xaxis='dopp',
+                nplot_delay=ndopps, nplot_doppler=int(ndopps/cavg_factor),
+                slow_time_inc=slow_time_inc,slow_time_span=slow_time_span)
 
+    ### Release processed arrays.
+    del data_matrix_1,data_matrix_2
+    
     t2 = time.time()
 
     print('Runtime : %3.4f min'%( (t2-t1)/60.0 ))
+
+    gc.collect()
+    
     return
 

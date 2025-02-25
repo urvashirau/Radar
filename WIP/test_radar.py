@@ -99,3 +99,7 @@ def test_ddm_tycho_2sec(myloc='desktop',npri=1000):
 
     #pl.savefig('tfig_ddm_'+str(npri)+'.png')
 
+    #### Different start point. 
+    ####make_ddm(fname=vfile_moon_tycho_desktop_FD,nframes=32,npri=npri,dodop=ddop_moon_tycho_desktop_FD,seekto=int(8e+6 + 20), focus_dop=True,focus_del=True,vb=False,fix_drops=True,frange=[0.45,0.65],pname='tycho_FD_'+str(npri))
+
+    
