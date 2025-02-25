@@ -11,7 +11,7 @@ import scipy.interpolate as interpol
 from   scipy.io   import  loadmat
 import pickle
 from tqdm import tqdm
-
+import time
 
 
 ################################################
@@ -487,7 +487,7 @@ def bin_2d(arr,np0, np1, fstartfrac=0.0):
     return binarr
 
 
-def resample_2d_avg(array, new_shape, fstartfrac=0.1):
+def resample_2d_avg(array, new_shape, fstartfrac=0.0):
     """Resamples a 2D array to a new shape by averaging.
 
     Args:
@@ -530,8 +530,10 @@ def disp_binned_ddm(pfile,np0,np1,frac):
         arr = pickle.load(f)
 
     print('Binning for plotting : ', arr.shape)
-    bin2plot = bin_2d(arr,np0,np1,frac)
+#    bin2plot = bin_2d(arr,np0,np1,frac)
 
+    bin2plot = resample_2d_avg(arr,(np0,np1))
+    
     pl.figure(2)
     pl.ion()
     pl.clf()

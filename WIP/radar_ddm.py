@@ -7,12 +7,14 @@ def make_ddm(fname='',mode='rb',
              frange=[0.08,0.20], dodop='',
              pname='',vb=True,
              fix_drops=True,
-             focus_dop=True, focus_del=True):
+             focus_dop=True, focus_del=True, debug=False):
     """
     frange : [start,end] : Fraction of the frequency range to display :  Tycho-Oct30 : 0.12 - 0.223
     dodop : File name from osod.  Empty string means 'no doppler correction'.
     """
 
+    t1 = time.time()
+    
     ### Open the file and seek to desired location
     d2s = 24*60*60
     fh, ref_mjd = open_file(fname,mode,seekto)
@@ -96,7 +98,7 @@ def make_ddm(fname='',mode='rb',
         print('Mean too low')
         return
     else:
-        sample_data = sample_data/mdata
+        sample_data /= mdata
     
     ### Apply Delay and Doppler correction to the 1D array
     if focus_dop==True and focus_del==True:
@@ -118,7 +120,8 @@ def make_ddm(fname='',mode='rb',
     print('Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(sample_data,data_matrix_1) ))
    
     ### Display
-    #disp_raster(np.transpose(data_matrix_1),pnum=1,title='Data matrix')
+    if debug==True:
+        disp_raster(np.transpose(data_matrix_1),pnum=1,title='Data matrix')
 
     ### Run correlation on fast time axis
     run_matched_filter(data_matrix_1, wform)
@@ -128,19 +131,23 @@ def make_ddm(fname='',mode='rb',
     print('Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(sample_data,data_matrix_2) ))
 
     ### Display
-    #disp_raster(data_matrix_2,pnum=2,title='After Matched filter')
+    if debug==True:
+        disp_raster(data_matrix_2,pnum=2,title='After Matched filter')
 
     
     ### Run FFT on slow time axis
     take_fft(data_matrix_2, fft)
 
-#    if pname != '':
-#        print('Pickling DDM array of shape ', data_matrix_2.shape)
-#        with open(pname+'.pkl','wb') as f:
-#            pickle.dump(data_matrix_2,f)
+    if pname != '':
+        print('Pickling DDM array of shape ', data_matrix_2.shape)
+        with open(pname+'_fullres.pkl','wb') as f:
+            pickle.dump(data_matrix_2,f)
 
     ### Display
     disp_raster(data_matrix_2,pnum=3,title='After Doppler FFT',pname=pname,frange=frange)
 
+    t2 = time.time()
+
+    print('Runtime : %3.4f min'%( (t2-t1)/60.0 ))
     return
 

@@ -15,6 +15,13 @@ from radar_ddm import *
 vfile_moon_tycho_desktop ="/lustre/rurvashi/RADAR/DataTest/Tycho/1pol/BT161D2_FD_No0004"
 ddop_moon_tycho_desktop = '../DATA/Doppler/Tycho-2024-10-30-1sec/PRDX.09v-93-93.2024-10-30.OUT'
 
+vfile_moon_tycho_desktop_HN ="/lustre/rurvashi/RADAR/DataTest/Tycho/1pol/BT161D2_HN_No0004"
+ddop_moon_tycho_desktop_HN = '../DATA/Doppler/Tycho-2024-10-30-1sec/PRDX.09v-91-91.2024-10-30.OUT'
+
+vfile_moon_tycho_desktop_BR ="/lustre/rurvashi/RADAR/DataTest/Tycho/1pol/BT161D2_BR_No0004"
+ddop_moon_tycho_desktop_BR = '../DATA/Doppler/Tycho-2024-10-30-1sec/PRDX.09v-98-98.2024-10-30.OUT'
+
+
 vfile_moon_tycho_laptop =  '../Data/BT161D2_FD_No0004'
 ddop_moon_tycho_laptop = '../Data/Doppler/Tycho-2024-10-30-1sec/PRDX.09v-93-93.2024-10-30.OUT'
 
@@ -88,7 +95,7 @@ def test_ddm_tycho_2sec(myloc='desktop',npri=1000):
         dodop= ddop_moon_tycho_laptop
 
 
-    make_ddm(fname=vfile,nframes=32,npri=npri,dodop=dodop,seekto=int(5.5e+6 + 14 + 2*32000) ,focus_dop=True,focus_del=True,vb=False,fix_drops=True,frange=[0.08,0.20])
+    make_ddm(fname=vfile,nframes=32,npri=npri,dodop=dodop,seekto=int(5.5e+6 + 14 + 2*32000) ,focus_dop=True,focus_del=True,vb=False,fix_drops=True,frange=[0.08,0.20],pname='tfig_ddm_'+str(npri))
 
-    pl.savefig('tfig_ddm_'+str(npri)+'.png')
+    #pl.savefig('tfig_ddm_'+str(npri)+'.png')
 
