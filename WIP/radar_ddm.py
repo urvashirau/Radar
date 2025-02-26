@@ -84,7 +84,7 @@ def make_ddm(fname='',mode='rb',
     slow_time_inc = ndelays/srate  ### Multiply by coherent averaging timescale. 
     slow_time_span = slow_time_inc * npri
 
-    print('Doppler Frequency span : 0 to 3.2f Hz'%(1.0/slow_time_inc) )
+    print('Doppler Frequency span : 0 to %3.2f Hz'%(1.0/slow_time_inc) )
     print("Number of Delay bins : %d    Number of Doppler bins : %d\n"%(ndelays, ndopps) )
 
     print("\nSTART PROCESSING\n")
@@ -96,10 +96,37 @@ def make_ddm(fname='',mode='rb',
     #### OLD_2
     print('Reading %d M samples'%(len(sample_data)/1e+6) )
     beg_time = read_frame_set_2(fh,sample_data,nframes*npri, fsize,fix_drops,vb=vb,frame_time=frame_timespan,ref_mjd=ref_mjd)
+    fh.close()
     if beg_time is None:
         print('No valid time. Exiting.')
         return;
 
+    #### Remove DC - along the slow-time axis (!!) 
+    data_matrix_dc = sample_data.reshape([ndopps,ndelays]).transpose()
+    print('DC : Reshape to 2D : Memory shared between 1D and 2D array views : '+str( np.shares_memory(sample_data,data_matrix_dc) ))
+    remove_dc(data_matrix_dc)
+    del data_matrix_dc 
+
+#    ### Low pass filter.
+#    if cavg_factor > 1:
+#        print('Apply coherent averaging along the slow-time axis x %d'%(cavg_factor))
+#        data_matrix_1 = resample_2d_avg( data_matrix_dc, (ndelays, int(ndopps/cavg_factor)) ,coherent=True)
+#        print('DATA SHAPE : ',data_matrix_1.shape)
+#        sample_data = data_matrix_1.transpose().reshape(data_matrix_1.shape[0]*data_matrix_1.shape[1])
+#        del data_matrix_dc
+#
+#        time_matrix_dc = sample_times.reshape([ndopps,ndelays]).transpose()
+#        time_matrix_1 = resample_2d_avg( time_matrix_dc, (ndelays, int(ndopps/cavg_factor)) ,coherent=False)
+#        print('TIME SHAPE : ',time_matrix_1.shape)
+#        sample_times = time_matrix_1.transpose().reshape(time_matrix_1.shape[0]*time_matrix_1.shape[1])
+#        del time_matrix_dc
+#
+#        gc.collect()
+#
+#        slow_time_inc = slow_time_inc * cavg_factor
+#        ndopps = int(ndopps/cavg_factor)
+#        
+    
     ### Apply Delay and Doppler correction to the 1D array
 
     if focus_dop==True and focus_del==True:
@@ -111,7 +138,7 @@ def make_ddm(fname='',mode='rb',
         doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd,dop_offset)
     if focus_dop==False and focus_del==True:
         print("Applying only Delay corrections from OSOD predictions")
-        delay_shift_frame_set_2(sample_data, sample_times, tint, vb,ref_mjd,dop_offset)
+        delay_shift_frame_set_2(sample_data, sample_times, tint, vb,ref_mjd)
     if focus_dop==False and focus_del==False:
         print("Applying NO Delay or Doppler corrections")
 
@@ -126,21 +153,18 @@ def make_ddm(fname='',mode='rb',
     if cavg_factor > 1:
         print('Apply coherent averaging along the slow-time axis x %d'%(cavg_factor))
         data_matrix_1 = resample_2d_avg( data_matrix_1, (int(ndopps/cavg_factor), ndelays) ,coherent=True)
+        #data_matrix_1 = low_pass_filter( data_matrix_1.transpose(), cavg_factor )
         slow_time_inc = slow_time_inc * cavg_factor
         ## Release memory from original array. 
         del sample_data
         gc.collect()
 
     print('\nMEMORY needed for averaged matrix : %3.4f GB'%(data_matrix_1.nbytes*1e-9))
+    print('DATA SHAPE : ',data_matrix_1.shape)
 
     ### Display
     if debug==True:
-        disp_raster(np.transpose(data_matrix_1),pnum=1,title='Data matrix',xaxis='time',slow_time_inc=slow_time_inc,slow_time_span=slow_time_span)
-
-    #### Remove DC.
-    mdata = np.mean(np.abs(data_matrix_1))
-    print('Remove DC (mean of input data is  : %3.5f)'%(mdata))
-    data_matrix_1  -= mdata
+        disp_raster(data_matrix_1.transpose(),pnum=1,title='Data matrix',xaxis='time',slow_time_inc=slow_time_inc,slow_time_span=slow_time_span)
     
     ### Run correlation on fast time axis
     run_matched_filter(data_matrix_1, wform)
@@ -165,7 +189,8 @@ def make_ddm(fname='',mode='rb',
 
     ### Display
     disp_raster(data_matrix_2,pnum=3,title='After Doppler FFT',pname=pname,frange=frange,xaxis='dopp',
-                nplot_delay=ndopps, nplot_doppler=int(ndopps/cavg_factor),
+                nplot_delay=int(ndopps), nplot_doppler=int(ndopps/cavg_factor),
+#                nplot_delay=int(ndopps*cavg_factor), nplot_doppler=int(ndopps),
                 slow_time_inc=slow_time_inc,slow_time_span=slow_time_span)
 
     ### Release processed arrays.

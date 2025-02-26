@@ -5,7 +5,7 @@ from baseband import vdif
 import numpy as np
 import astropy.units as u
 from scipy.fft import fft,fftfreq
-from scipy.signal import correlate
+from scipy.signal import correlate,windows,convolve
 from astropy.time import Time
 import scipy.interpolate as interpol
 from   scipy.io   import  loadmat
@@ -493,6 +493,26 @@ def bin_2d(arr,np0, np1, fstartfrac=0.0):
     return binarr
 
 
+def low_pass_filter(data, cavg_factor):
+    """
+    datastack = [ ndelays, ndopps ]
+    Convolve with a smoothing function, along the Doppler axis
+    Decimate by the cavg_factor - return an array indexed by strides. 
+    """
+    ndopps = data.shape[1]
+    ndelays = data.shape[0]
+
+    #win = windows.hann(cavg_factor*10)
+    win = windows.kaiser(M=cavg_factor*4, beta=100)
+    norm = np.sum(win)
+    
+    print('Convolve along the slow-time axis with a smoothing function (area = %3.2f)'%(norm))
+    for ii in tqdm(range(0,ndelays)):
+        data[ii,:] = convolve(data[ii,:], win, mode='same')/norm
+
+    return data[:,0:ndopps:cavg_factor].transpose()
+
+
 def resample_2d_avg(array, new_shape, fstartfrac=0.0,coherent=False):
     """Resamples a 2D array to a new shape by averaging.
 
@@ -691,13 +711,20 @@ def take_fft(datastack,fft):
 
     fftlen = shp[1] ## ndopps
     for i in tqdm(range(0, shp[0])):
+        #ms = np.mean(datastack[i,:])
         datastack[i,:] = np.abs(do_fft(fft,datastack[i,:]))
-#        farr = np.abs(do_fft(fft,datastack[i,:]))
-#        datastack[i,:] = farr[int(fftlen/2-shp[1]/2):int(fftlen/2+shp[1]/2)]
 
-#        if np.mod(i, int(shp[0]/10)) == 0:
-#            print('FFT at delay %d/%d'%(i,shp[0]))
+def remove_dc(datastack):
+    '''
+    Remove DC along the slow-time axis and return
+    datastack = [ ndelays, ndopps ]
+    '''
+    shp = datastack.shape
+    print('Remove DC along the slow-time axis (%d points) for %d Delay bins'%(shp[1],shp[0]))
 
+    for i in tqdm(range(0, shp[0])):
+        ms = np.mean(datastack[i,:])
+        datastack[i,:] = datastack[i,:]-ms
 
 
 
