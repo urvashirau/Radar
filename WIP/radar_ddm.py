@@ -182,10 +182,10 @@ def make_ddm(fname='',mode='rb',
     take_fft(data_matrix_2, fft)
 
     
-    if pname != '':
-        print('Pickling DDM array of shape ', data_matrix_2.shape)
-        with open(pname+'_fullres.pkl','wb') as f:
-            pickle.dump(data_matrix_2,f)
+#    if pname != '':
+#        print('Pickling DDM array of shape ', data_matrix_2.shape)
+#        with open(pname+'_fullres.pkl','wb') as f:
+#            pickle.dump(data_matrix_2,f)
 
     ### Display
     disp_raster(data_matrix_2,pnum=3,title='After Doppler FFT',pname=pname,frange=frange,xaxis='dopp',
