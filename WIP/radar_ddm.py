@@ -3,13 +3,15 @@ from radar_lib import *
 def make_ddm(fname='',mode='rb',
              nframes=1, npri=1, ### nframes per PRP  x  n PRP
              #bw=32.0,
+             ref_time='',
              seekto=1032*0,
              frange=[0.08,0.20], dodop='',
              pname='',vb=True,
              fix_drops=True,
              focus_dop=True, focus_del=True,
-             debug=False, dop_offset=0.0,
-             cavg_factor=1.0):
+             debug=False, dop_offset=0.0,del_offset=0.0,
+             cavg_factor=1.0,
+             in_pnum=None):
     """
     frange : [start,end] : Fraction of the frequency range to display :  Tycho-Oct30 : 0.12 - 0.223
     dodop : File name from osod.  Empty string means 'no doppler correction'.
@@ -25,7 +27,11 @@ def make_ddm(fname='',mode='rb',
     fsize = fin['samples_per_frame']
     srate = fin['sample_rate'].value
     frame_timespan = fin['samples_per_frame']/fin['sample_rate'].value  ## time range per frame. 
-  
+
+
+    if ref_time != '':
+        ref_mjd = Time(ref_time).mjd
+    
     ## Total number of samples 
     nsamples = nframes*fsize * npri
 
@@ -54,7 +60,7 @@ def make_ddm(fname='',mode='rb',
         ref_dop = fint(ref_mjd)
         print("\nReference Doppler Shift : %3.6f Hz  ( %3.6f MHz ) with offset : %3.6f Hz"%(ref_dop, ref_dop/1e+6, dop_offset) )
         ref_del = tint(ref_mjd)
-        print("Reference Delay Shift : %3.6f sec  ( %3.6f microsec )"%(ref_del, ref_del*1e+6) )
+        print("Reference Delay Shift : %3.6f sec  ( %3.6f microsec ) with offset : %3.6f microsec"%(ref_del, ref_del*1e+6, del_offset*1e+6) )
     else: ## dodop=''
         focus_del=False
         focus_dop=False
@@ -131,14 +137,14 @@ def make_ddm(fname='',mode='rb',
 
     if focus_dop==True and focus_del==True:
         print("Applying Delay and Doppler corrections from OSOD predictions")
-        delay_shift_frame_set_2(sample_data, sample_times, tint, vb, ref_mjd)
+        delay_shift_frame_set_2(sample_data, sample_times, tint, vb, ref_mjd,del_offset)
         doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd,dop_offset)
     if focus_dop==True and focus_del==False:
         print("Applying only Doppler corrections from OSOD predictions")
         doppler_shift_frame_set_2(sample_data, sample_times, fint, vb, ref_mjd,dop_offset)
     if focus_dop==False and focus_del==True:
         print("Applying only Delay corrections from OSOD predictions")
-        delay_shift_frame_set_2(sample_data, sample_times, tint, vb,ref_mjd)
+        delay_shift_frame_set_2(sample_data, sample_times, tint, vb,ref_mjd,del_offset)
     if focus_dop==False and focus_del==False:
         print("Applying NO Delay or Doppler corrections")
 
@@ -188,7 +194,11 @@ def make_ddm(fname='',mode='rb',
 #            pickle.dump(data_matrix_2,f)
 
     ### Display
-    disp_raster(data_matrix_2,pnum=3,title='After Doppler FFT',pname=pname,frange=frange,xaxis='dopp',
+    if debug==True:
+        pnum=3
+    else:
+        pnum=in_pnum
+    disp_raster(data_matrix_2,pnum=pnum,title='After Doppler FFT',pname=pname,frange=frange,xaxis='dopp',
                 nplot_delay=int(ndopps), nplot_doppler=int(ndopps/cavg_factor),
 #                nplot_delay=int(ndopps*cavg_factor), nplot_doppler=int(ndopps),
                 slow_time_inc=slow_time_inc,slow_time_span=slow_time_span)
@@ -204,3 +214,215 @@ def make_ddm(fname='',mode='rb',
     
     return
 
+
+
+
+def make_sequence_ddm(fname='',dodop='',
+                      tstart='2024-10-30T15:21:00.000', tinc='0.5s', nsteps=5,
+                      pname='ex',npri=1000):
+    """
+    Construct DDMs at regular intervals and save the plot arrays.
+    tstart : start time as a string.
+    tinc : time increment between steps ( 30s, or 2min...  )
+    nsteps : number of steps to make DDMs at
+    """
+
+    d2s = 24*60*60.0
+    
+    t0 = Time(tstart)
+    td = TimeDelta(tinc)
+    
+    for tnow in range(0,nsteps):
+        seekto = t0.isot
+        pfname = pname+'_'+seekto
+        
+        make_ddm(fname=fname,nframes=32,npri=npri,
+                 dodop=dodop,focus_dop=True,focus_del=True,
+                 vb=False,fix_drops=True,frange=[0.0,1.0],dop_offset=0.0,del_offset=0.0,
+                 cavg_factor=1,debug=False,ref_time='',
+                 seekto=seekto,pname=pfname)
+            
+            #pl.clf();
+            #pl.imshow(np.abs(arr[:,wmin:wmax]),aspect='auto',origin='lower',
+            #          cmap='gray',norm=mcolors.PowerNorm(gamma=0.8,vmin=0.0,vmax=2500));
+            ##pl.colorbar();
+            #pl.title(pfname);pl.xlabel('Doppler');pl.ylabel('Range');
+            #input()
+            
+        t0 = t0 + td
+
+    return
+
+
+ani_t0=None
+ani_tcnt=0
+ani=None
+
+
+def plot_sequence_ddm(fname='',dodop='',
+                     reftime='2024-10-30T15:21:00.000',
+                     tstart=int(5.5e6 + 10 + 32*30000 ),
+                     tinc=int(32*1000), nsteps=5,
+                     pname='ex',npri=1000):
+
+    """
+    Plot  DDMs at regular intervals and save the plot arrays.
+    tstart : start time as a string.
+    tinc : time increment between steps ( 30s, or 2min...  )
+    nsteps : number of steps to make DDMs at
+    """
+    global ani
+
+    d2s = 24*60*60.0
+
+    seekto = tstart
+
+    pfname = pname+'_'+str(seekto)
+    
+    parr = read_arr(pfname,npri)
+    
+    fig, ax = plt.subplots(1)
+    im = ax.imshow(parr,aspect='auto',origin='lower',
+                   cmap='gray',norm=mcolors.PowerNorm(gamma=0.8,vmin=0.0,vmax=3000))
+    ax.set_xlabel('Doppler')
+    ax.set_ylabel('Delay')
+    
+    ani = FuncAnimation(fig, update_plot, fargs=(im,ax,pname,tstart,tinc,nsteps,npri),
+                        interval=1000,
+                        cache_frame_data=False)
+    plt.show()
+
+
+
+
+def update_plot(frame,im,ax,pname,tstart,tinc,nsteps,npri):
+    global ani_t0
+    global ani_tcnt
+    global ani
+
+    if ani_t0 == None:
+        ani_t0 = tstart
+
+    if ani_tcnt==nsteps:
+        print('Done!')
+        ani.event_source.stop()
+        return
+        
+    seekto = ani_t0
+    pfname = pname+'_'+str(seekto)
+    
+    parr = read_arr(pfname,npri)
+
+    im.set_data(parr)
+    ax.set_title(pfname)
+
+    ani_tcnt += 1
+    
+    ani_t0 = ani_t0 + tinc
+
+
+    return
+
+
+def read_arr(pkl_name='',npri=1000):
+    print('Reading ',pkl_name)
+    with open(pkl_name+'.pkl','rb') as f:
+        arr = pickle.load(f)
+
+    # find max.
+    x,y = np.unravel_index( np.argmax(np.abs(arr)**2), arr.shape )
+    print('Max of %3.2f at ( %d , %d )'%(arr[x,y], x, y) )
+
+    wid_dop = int(0.04 * npri)
+    wid_del = int(0.35 * npri)
+    
+    xmin = max(x-wid_del,0)
+    xmax = min(x+wid_del, npri)
+    ymin = max(y-wid_dop,0)
+    ymax = min(y+wid_dop,npri)
+        
+#    parr = np.flipud(np.abs(arr[xmin:xmax,ymin:ymax]))
+    parr = np.abs(arr[xmin:xmax,ymin:ymax])
+    
+    print('Disp width : del = %d   dop = %d'%(2*wid_del,2*wid_dop))
+    print('\n---------------------')
+
+    return parr
+    
+
+
+
+def try_sequence_ddm(fname='',dodop='',
+                     reftime='2024-10-30T15:21:00.000',
+                     tstart=int(5.5e6 + 10 + 32*30000 ),
+                     tinc=int(32*1000), nsteps=5,
+                     pname='ex',npri=50,compute=False):
+    """
+    Construct DDMs at regular intervals and save the plot arrays.
+    tstart : start time as a string.
+    tinc : time increment between steps ( 30s, or 2min...  )
+    nsteps : number of steps to make DDMs at
+    """
+
+    d2s = 24*60*60.0
+
+    seekto = tstart
+    
+    for tnow in range(0,nsteps):
+        pfname = pname+'_'+str(seekto)
+
+        pkl_name = pfname
+
+
+        if compute==True:
+
+            tnpri = 50
+
+            for tnpri in [100]: ##50,1000]:
+            
+                make_ddm(fname=fname,nframes=32,npri=tnpri,
+                         dodop=dodop,focus_dop=True,focus_del=True,
+                         vb=False,fix_drops=True,frange=[0.0,1.0],
+                         dop_offset=0.0,del_offset=0.0,
+                         cavg_factor=1,debug=False,ref_time=reftime,
+                         seekto=seekto,pname=pfname,in_pnum=1)
+
+
+                print('Reading ',pkl_name)
+                with open(pkl_name+'.pkl','rb') as f:
+                    arr = pickle.load(f)
+
+                # find max.
+                x,y = np.unravel_index( np.argmax(np.abs(arr)), arr.shape )
+                print('\n---------------------')
+                print('\nMax of %3.2f at ( %d , %d )'%(arr[x,y], x, y) )
+                
+                x_off = int(tnpri/2) - x
+                y_off = int(tnpri/2) - y
+                
+                dop_off = y_off/tnpri * 500.0 * 2 # Hz
+                del_off = x_off/tnpri * 0.002  # sec
+                ###del_off = int(x_off/tnpri * 32/2)
+                
+                print('Offsets :   Del = %3.4f frames  Dop = %3.4f Hz \n'%(del_off,dop_off))
+                print('\n---------------------')
+
+            make_ddm(fname=fname,nframes=32,npri=npri,
+                     dodop=dodop,focus_dop=True,focus_del=True,
+                     vb=False,fix_drops=True,frange=[0.45,0.55],
+                     dop_offset=dop_off,del_offset=del_off,
+                     cavg_factor=1,debug=False,ref_time=reftime,
+                     seekto=seekto, pname=pfname,in_pnum=2)
+
+        parr = read_arr(pfname,npri)
+
+        pl.figure(1,figsize=(8,8))
+        pl.clf()
+        pl.imshow(parr,aspect='auto',origin='lower',
+                  cmap='gray',norm=mcolors.PowerNorm(gamma=0.8,vmin=0.0,vmax=2500))
+        pl.savefig(pname+'_frame_'+ str(tnow+1)+'.png')
+
+        
+        seekto = seekto + tinc
+
+    return

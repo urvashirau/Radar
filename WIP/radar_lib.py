@@ -1,18 +1,22 @@
 import baseband
 import pylab as pl
+import matplotlib.colors as mcolors
 from baseband_tasks.fourier import fft_maker
 from baseband import vdif
 import numpy as np
 import astropy.units as u
 from scipy.fft import fft,fftfreq
 from scipy.signal import correlate,windows,convolve
-from astropy.time import Time
+from astropy.time import Time, TimeDelta
 import scipy.interpolate as interpol
 from   scipy.io   import  loadmat
 import pickle
 from tqdm import tqdm
 import time
 import gc
+import imageio
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 
 ################################################
@@ -291,7 +295,7 @@ def doppler_shift_frame_set_2(data=None, tim=None, fint=None, vb=True, ref_mjd=N
 
 
 ## Apply time varying delay correction, based on "tint", and interpolation function. 
-def delay_shift_frame_set_2(data=None, tim=None, tint=None, vb=True,ref_mjd=None):
+def delay_shift_frame_set_2(data=None, tim=None, tint=None, vb=True,ref_mjd=None, offset=0.0):
     """
     Apply Delay corrections to the time series, prior to the FFTs
      
@@ -307,7 +311,7 @@ def delay_shift_frame_set_2(data=None, tim=None, tint=None, vb=True,ref_mjd=None
     d2s = 24*60*60
 
     ## delr is the list of 'time delay', interpolated onto the data timesteps. 
-    ref_del = tint( ref_mjd )
+    ref_del = tint( ref_mjd ) + offset
 
 #    if vb==True:
 #        Ttim1 = Time(tim[0]/d2s + ref_mjd ,format='mjd')
@@ -718,6 +722,7 @@ def remove_dc(datastack):
     '''
     Remove DC along the slow-time axis and return
     datastack = [ ndelays, ndopps ]
+    ### TODO -- make this with a zero sum filter, to remove time varying DC
     '''
     shp = datastack.shape
     print('Remove DC along the slow-time axis (%d points) for %d Delay bins'%(shp[1],shp[0]))
