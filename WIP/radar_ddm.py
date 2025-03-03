@@ -278,8 +278,11 @@ def plot_sequence_ddm(fname='',dodop='',
     seekto = tstart
 
     pfname = pname+'_'+str(seekto)
+    ref_pfname = pfname
+
+    parr = read_arr_match(ref_pfname,pfname,npri)
     
-    parr = read_arr(pfname,npri)
+    #parr = read_arr(pfname,npri)
     
     fig, ax = plt.subplots(1)
     im = ax.imshow(parr,aspect='auto',origin='lower',
@@ -287,7 +290,7 @@ def plot_sequence_ddm(fname='',dodop='',
     ax.set_xlabel('Doppler')
     ax.set_ylabel('Delay')
     
-    ani = FuncAnimation(fig, update_plot, fargs=(im,ax,pname,tstart,tinc,nsteps,npri),
+    ani = FuncAnimation(fig, update_plot, fargs=(im,ax,pname,tstart,tinc,nsteps,npri,ref_pfname),
                         interval=1000,
                         cache_frame_data=False)
     plt.show()
@@ -295,23 +298,24 @@ def plot_sequence_ddm(fname='',dodop='',
 
 
 
-def update_plot(frame,im,ax,pname,tstart,tinc,nsteps,npri):
+def update_plot(frame,im,ax,pname,tstart,tinc,nsteps,npri,ref_pfname):
     global ani_t0
     global ani_tcnt
     global ani
 
     if ani_t0 == None:
-        ani_t0 = tstart
+        ani_t0 = tstart + tinc
 
     if ani_tcnt==nsteps:
         print('Done!')
         ani.event_source.stop()
+        plt.close(frame)
         return
         
     seekto = ani_t0
     pfname = pname+'_'+str(seekto)
     
-    parr = read_arr(pfname,npri)
+    parr = read_arr_match(ref_pfname,pfname,npri)
 
     im.set_data(parr)
     ax.set_title(pfname)
@@ -322,34 +326,6 @@ def update_plot(frame,im,ax,pname,tstart,tinc,nsteps,npri):
 
 
     return
-
-
-def read_arr(pkl_name='',npri=1000):
-    print('Reading ',pkl_name)
-    with open(pkl_name+'.pkl','rb') as f:
-        arr = pickle.load(f)
-
-    # find max.
-    x,y = np.unravel_index( np.argmax(np.abs(arr)**2), arr.shape )
-    print('Max of %3.2f at ( %d , %d )'%(arr[x,y], x, y) )
-
-    wid_dop = int(0.04 * npri)
-    wid_del = int(0.35 * npri)
-    
-    xmin = max(x-wid_del,0)
-    xmax = min(x+wid_del, npri)
-    ymin = max(y-wid_dop,0)
-    ymax = min(y+wid_dop,npri)
-        
-#    parr = np.flipud(np.abs(arr[xmin:xmax,ymin:ymax]))
-    parr = np.abs(arr[xmin:xmax,ymin:ymax])
-    
-    print('Disp width : del = %d   dop = %d'%(2*wid_del,2*wid_dop))
-    print('\n---------------------')
-
-    return parr
-    
-
 
 
 def try_sequence_ddm(fname='',dodop='',
@@ -367,9 +343,13 @@ def try_sequence_ddm(fname='',dodop='',
     d2s = 24*60*60.0
 
     seekto = tstart
+
+    refpfname=''
     
     for tnow in range(0,nsteps):
         pfname = pname+'_'+str(seekto)
+        if tnow==0:
+            ref_pfname = pfname
 
         pkl_name = pfname
 
@@ -414,7 +394,8 @@ def try_sequence_ddm(fname='',dodop='',
                      cavg_factor=1,debug=False,ref_time=reftime,
                      seekto=seekto, pname=pfname,in_pnum=2)
 
-        parr = read_arr(pfname,npri)
+        #parr = read_arr(pfname,npri)
+        parr = read_arr_match(ref_pfname,pfname,npri)
 
         pl.figure(1,figsize=(8,8))
         pl.clf()

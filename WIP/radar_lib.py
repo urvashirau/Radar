@@ -5,7 +5,7 @@ from baseband_tasks.fourier import fft_maker
 from baseband import vdif
 import numpy as np
 import astropy.units as u
-from scipy.fft import fft,fftfreq
+from scipy.fft import fft,fftfreq, fft2, ifft2,fftshift
 from scipy.signal import correlate,windows,convolve
 from astropy.time import Time, TimeDelta
 import scipy.interpolate as interpol
@@ -769,4 +769,86 @@ def run_matched_filter(datastack,wform):
     for pri in tqdm(range(0,shp[0])):
         datastack[pri,:] = correlate(datastack[pri,:], wform, mode='same')
 
+
+
+
+def read_arr(pkl_name='',npri=1000,offset=None):
+    print('Reading ',pkl_name)
+    with open(pkl_name+'.pkl','rb') as f:
+        arr = pickle.load(f)
+
+    # find max.
+    x,y = np.unravel_index( np.argmax(np.abs(arr)**2), arr.shape )
+    if offset != None:
+        x = x - offset[0]
+        y = y - offset[1]
+        print('Added offset!')
+        
+    print('Center is %3.2f at ( %d , %d )'%(arr[x,y], x, y) )
+
+    wid_dop = int(0.04 * npri)
+    wid_del = int(0.3 * npri)
+    
+    xmin = max(x-wid_del,0)
+    xmax = min(x+wid_del, npri)
+    ymin = max(y-wid_dop,0)
+    ymax = min(y+wid_dop,npri)
+        
+#    parr = np.flipud(np.abs(arr[xmin:xmax,ymin:ymax]))
+    parr = np.abs(arr[xmin:xmax,ymin:ymax])
+    
+    #print('Disp width : del = %d   dop = %d'%(2*wid_del,2*wid_dop))
+    #print('\n---------------------')
+
+    return parr
+    
+
+def read_arr_match(refpkl_name='', pkl_name='',npri=1000):
+
+    arr1 = read_arr(refpkl_name)
+    arr2 = read_arr(pkl_name)
+    
+    xoff, yoff = calculate_pixel_offset(arr1,arr2)
+
+    print('Offset : %s '%(str((xoff,yoff))  ) )
+    
+    return read_arr(pkl_name,npri) #,offset=[xoff,yoff])
+    
+        
+def calculate_pixel_offset(image1,image2):
+        """
+        Calculates the pixel offset between two images using cross-correlation in the frequency domain.
+        
+        Args:
+        image1 (numpy.ndarray): The first image.
+        image2 (numpy.ndarray): The second image (shifted copy of the first).
+        
+        Returns:
+        tuple: The (x, y) pixel offset between the two images.
+        """
+        pl.figure(2)
+
+        # Calculate the cross-correlation in the frequency domain
+        cross_correlation_fft = fft2(image1) * np.conj(fft2(image2))
+        cross_correlation = fftshift(ifft2(cross_correlation_fft)) / (image1.shape[0]*image1.shape[1])
+        
+        # Find the peak of the cross-correlation, which corresponds to the offset
+        peak_index = np.unravel_index(np.argmax(np.abs(cross_correlation)), cross_correlation.shape)
+
+        print('Peak : ', peak_index)
+
+        pl.subplot(131)
+        pl.imshow(np.abs(image1),aspect='auto')
+        pl.subplot(132)
+        pl.imshow(np.abs(image2),aspect='auto')
+        pl.subplot(133)
+        pl.imshow(np.abs(cross_correlation),aspect='auto')
+        
+        #return peak_index
+        
+        # Calculate the offset relative to the center of the image
+        center_index = np.array(image1.shape) // 2
+        offset = center_index  - np.array(peak_index) 
+        
+        return offset[0], offset[1] 
 
