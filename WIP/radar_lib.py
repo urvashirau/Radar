@@ -805,14 +805,14 @@ def read_arr(pkl_name='',npri=1000,offset=None):
 
 def read_arr_match(refpkl_name='', pkl_name='',npri=1000):
 
-    arr1 = read_arr(refpkl_name)
-    arr2 = read_arr(pkl_name)
+    arr1 = read_arr(refpkl_name,npri)
+    arr2 = read_arr(pkl_name,npri)
     
     xoff, yoff = calculate_pixel_offset(arr1,arr2)
 
     print('Offset : %s '%(str((xoff,yoff))  ) )
     
-    return read_arr(pkl_name,npri) #,offset=[xoff,yoff])
+    return read_arr(pkl_name,npri,offset=[xoff,yoff])
     
         
 def calculate_pixel_offset(image1,image2):
@@ -827,6 +827,9 @@ def calculate_pixel_offset(image1,image2):
         tuple: The (x, y) pixel offset between the two images.
         """
         pl.figure(2)
+
+        print(image1.shape)
+        print(image2.shape)
 
         # Calculate the cross-correlation in the frequency domain
         cross_correlation_fft = fft2(image1) * np.conj(fft2(image2))
