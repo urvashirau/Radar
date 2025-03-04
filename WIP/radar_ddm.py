@@ -332,7 +332,7 @@ def try_sequence_ddm(fname='',dodop='',
                      reftime='2024-10-30T15:21:00.000',
                      tstart=int(5.5e6 + 10 + 32*30000 ),
                      tinc=int(32*1000), nsteps=5,
-                     pname='ex',npri=50,compute=False):
+                     pname='ex',npri=50,compute=False,cropf=1.0):
     """
     Construct DDMs at regular intervals and save the plot arrays.
     tstart : start time as a string.
@@ -398,14 +398,20 @@ def try_sequence_ddm(fname='',dodop='',
                      seekto=seekto, pname=pfname,in_pnum=2)
 
         #parr = read_arr(pfname,npri)
-        parr = read_arr_match(ref_pfname,pfname,npri)
+        parr = read_arr_match(ref_pfname,pfname,npri,cropf=cropf)
 
         pl.ioff()
         pl.figure(1,figsize=(8,8))
         pl.clf()
         pl.imshow(parr,aspect='auto',origin='lower',
                   cmap='gray',norm=mcolors.PowerNorm(gamma=0.8,vmin=0.0,vmax=2500))
-        pl.savefig(pname+'_frame_'+ str(tnow+1)+'.png')
+
+        fn = tnow+1
+        if fn<10:
+            fns = '0'+str(fn)
+        else:
+            fns = str(fn)
+        pl.savefig(pname+'_frame_'+ fns+'.png')
         pl.ion()
         
         seekto = seekto + tinc

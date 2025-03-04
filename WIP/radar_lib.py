@@ -772,7 +772,7 @@ def run_matched_filter(datastack,wform):
 
 
 
-def read_arr(pkl_name='',npri=1000,offset=None):
+def read_arr(pkl_name='',npri=1000,offset=None,cropf=1.0):
     print('Reading ',pkl_name)
     with open(pkl_name+'.pkl','rb') as f:
         arr = pickle.load(f)
@@ -786,8 +786,8 @@ def read_arr(pkl_name='',npri=1000,offset=None):
     else:
         print('Max is %3.2f at ( %d , %d )'%(arr[x,y], x, y) )
 
-    wid_dop = int(0.04 * npri)
-    wid_del = int(0.3 * npri)
+    wid_dop = int(cropf*0.035 * npri)
+    wid_del = int(cropf*0.3 * npri)
     
     xmin = max(x-wid_del,0)
     xmax = min(x+wid_del, npri)
@@ -803,7 +803,7 @@ def read_arr(pkl_name='',npri=1000,offset=None):
     return parr
     
 
-def read_arr_match(refpkl_name='', pkl_name='',npri=1000):
+def read_arr_match(refpkl_name='', pkl_name='',npri=1000,cropf=1.0):
 
     arr1 = np.sqrt(read_arr(refpkl_name,npri))
     arr2 = np.sqrt(read_arr(pkl_name,npri))
@@ -824,7 +824,7 @@ def read_arr_match(refpkl_name='', pkl_name='',npri=1000):
 
     print('Offset : %s '%(str((xoff,yoff))  ) )
     
-    return read_arr(pkl_name,npri,offset=[xoff,yoff])
+    return read_arr(pkl_name,npri,offset=[xoff,yoff],cropf=cropf)
     
         
 def calculate_pixel_offset(image1,image2):
