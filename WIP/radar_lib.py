@@ -6,7 +6,7 @@ from baseband import vdif
 import numpy as np
 import astropy.units as u
 from scipy.fft import fft,fftfreq, fft2, ifft2,fftshift
-from scipy.signal import correlate,windows,convolve
+from scipy.signal import correlate,windows,convolve,correlate2d
 from astropy.time import Time, TimeDelta
 import scipy.interpolate as interpol
 from   scipy.io   import  loadmat
@@ -780,11 +780,11 @@ def read_arr(pkl_name='',npri=1000,offset=None):
     # find max.
     x,y = np.unravel_index( np.argmax(np.abs(arr)**2), arr.shape )
     if offset != None:
-        x = x - offset[0]
-        y = y - offset[1]
-        print('Added offset!')
-        
-    print('Center is %3.2f at ( %d , %d )'%(arr[x,y], x, y) )
+        x = x + offset[0]
+        y = y + offset[1]
+        print('Added offset %s to max loc get to ( %d , %d )'%(str(offset),x,y))
+    else:
+        print('Max is %3.2f at ( %d , %d )'%(arr[x,y], x, y) )
 
     wid_dop = int(0.04 * npri)
     wid_del = int(0.3 * npri)
@@ -805,8 +805,20 @@ def read_arr(pkl_name='',npri=1000,offset=None):
 
 def read_arr_match(refpkl_name='', pkl_name='',npri=1000):
 
-    arr1 = read_arr(refpkl_name,npri)
-    arr2 = read_arr(pkl_name,npri)
+    arr1 = np.sqrt(read_arr(refpkl_name,npri))
+    arr2 = np.sqrt(read_arr(pkl_name,npri))
+
+    ## enhance contrast
+
+    max1 = np.max(arr1)
+    max2 = np.max(arr2)
+    fr =0.7
+    
+    arr1[arr1<fr*max1]=0.0
+    arr1[arr1>fr*max1]=1
+    arr2[arr2<fr*max2]=0.0
+    arr2[arr2>fr*max2]=1
+
     
     xoff, yoff = calculate_pixel_offset(arr1,arr2)
 
@@ -826,26 +838,26 @@ def calculate_pixel_offset(image1,image2):
         Returns:
         tuple: The (x, y) pixel offset between the two images.
         """
-        pl.figure(2)
-
-        print(image1.shape)
-        print(image2.shape)
+        pl.ion()
+        pl.figure(2,figsize=(9,3))
 
         # Calculate the cross-correlation in the frequency domain
-        cross_correlation_fft = fft2(image1) * np.conj(fft2(image2))
+        cross_correlation_fft = fft2((image1)) * np.conj(fft2((image2)))
         cross_correlation = fftshift(ifft2(cross_correlation_fft)) / (image1.shape[0]*image1.shape[1])
-        
+
+        ##cross_correlation = correlate2d(image1,image2,mode='same')
+
         # Find the peak of the cross-correlation, which corresponds to the offset
         peak_index = np.unravel_index(np.argmax(np.abs(cross_correlation)), cross_correlation.shape)
 
         print('Peak : ', peak_index)
 
         pl.subplot(131)
-        pl.imshow(np.abs(image1),aspect='auto')
+        pl.imshow(np.abs(image1),aspect='auto',origin='lower')
         pl.subplot(132)
-        pl.imshow(np.abs(image2),aspect='auto')
+        pl.imshow(np.abs(image2),aspect='auto',origin='lower')
         pl.subplot(133)
-        pl.imshow(np.abs(cross_correlation),aspect='auto')
+        pl.imshow(np.abs(cross_correlation),aspect='auto',origin='lower')
         
         #return peak_index
         

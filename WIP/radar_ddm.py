@@ -348,6 +348,9 @@ def try_sequence_ddm(fname='',dodop='',
     
     for tnow in range(0,nsteps):
         pfname = pname+'_'+str(seekto)
+        print('\n------------------')
+        print('\nFrame %d : %s'%(tnow+1,pfname))
+
         if tnow==0:
             ref_pfname = pfname
 
@@ -397,12 +400,13 @@ def try_sequence_ddm(fname='',dodop='',
         #parr = read_arr(pfname,npri)
         parr = read_arr_match(ref_pfname,pfname,npri)
 
+        pl.ioff()
         pl.figure(1,figsize=(8,8))
         pl.clf()
         pl.imshow(parr,aspect='auto',origin='lower',
                   cmap='gray',norm=mcolors.PowerNorm(gamma=0.8,vmin=0.0,vmax=2500))
         pl.savefig(pname+'_frame_'+ str(tnow+1)+'.png')
-
+        pl.ion()
         
         seekto = seekto + tinc
 
