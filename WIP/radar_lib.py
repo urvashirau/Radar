@@ -786,7 +786,7 @@ def read_arr(pkl_name='',npri=1000,offset=None,cropf=1.0):
     else:
         print('Max is %3.2f at ( %d , %d )'%(arr[x,y], x, y) )
 
-    wid_dop = int(cropf*0.035 * npri)
+    wid_dop = int(cropf*0.025 * npri)
     wid_del = int(cropf*0.3 * npri)
     
     xmin = max(x-wid_del,0)
